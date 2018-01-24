@@ -7,6 +7,7 @@ $: << File.expand_path("../lib", File.dirname(__FILE__))
 require 'minitest/autorun'
 require 'odba/index'
 require 'odba/index_definition'
+require 'odba/storage'
 require 'odba/odba'
 require 'flexmock'
 
@@ -24,7 +25,8 @@ module ODBA
   class TestIndexCommon < Minitest::Test
     include FlexMock::TestCase
     def setup
-      @storage = flexmock('Storage')
+      @storage =  flexmock('Storage', ODBA::Storage.instance)
+      @dbi = flexmock('dbi', Sequel.sqlite)
       ODBA.storage = @storage
       df = IndexDefinition.new
       df.index_name = 'index'
@@ -158,21 +160,21 @@ module ODBA
       target = Target.new
       target.odba_id = 2
       target.origin = origin
-      @storage.should_receive(:index_origin_ids).with('index', 2)\
+      @storage.should_receive(:index_origin_ids).once.with('index', 2)\
         .and_return([[1, 'old-term'], [4, 'obsolete-term']])
       @storage.should_receive(:index_delete_target)\
-        .with('index', 1, 'old-term', 2).and_return { assert(true) }
+        .with('index', 1, 'old-term', 2).once.and_return { assert(true) }
       @storage.should_receive(:index_delete_target)\
-        .with('index', 4, 'obsolete-term', 2).and_return { assert(true) }
+        .with('index', 4, 'obsolete-term', 2).once.and_return { assert(true) }
       @storage.should_receive(:update_index)\
-        .with('index', 1, 'search-term', 2).and_return { 
+        .with('index', 1, 'search-term', 2).once.and_return { 
         assert(true) }
       @index.update(target)
     end
     def test_update__subclass
       origin = OriginSubclass.new
       target = TargetSubclass.new
-      @storage.should_receive(:index_target_ids).and_return(3)
+      @storage.should_receive(:index_target_ids).once.and_return(3)
       @index.update(origin)
       @index.update(target)
     end
@@ -305,12 +307,12 @@ module ODBA
   class TestFulltextIndex < Minitest::Test
     include FlexMock::TestCase
     def setup
-      @storage = flexmock('Storage')
-      @storage.should_receive(:create_fulltext_index).with('index')
+      @storage =  flexmock('Storage', ODBA::Storage.instance)
+      @dbi = flexmock('dbi', Sequel.sqlite)
       ODBA.storage = @storage
+      @storage.should_receive(:create_fulltext_index).with('index')
       df = IndexDefinition.new
       df.index_name = 'index'
-      df.dictionary = 'german'
       df.origin_klass = :Origin
       df.target_klass = :Target
       df.resolve_origin = :origin
@@ -320,12 +322,12 @@ module ODBA
     def test_fetch_ids
       rows = [[1,3], [2,2], [3,1]]
       @storage.should_receive(:retrieve_from_fulltext_index)\
-        .with('index', 'search-term', 'german', false).and_return rows
+        .with('index', 'search-term', false).once.and_return rows
       assert_equal([1,2,3], @index.fetch_ids('search-term'))
     end
     def test_do_update_index
       @storage.should_receive(:update_fulltext_index)\
-        .with('index', 3, 'some full text', 4, 'german')
+        .with('index', 3, 'some full text', 4)
       @index.do_update_index(3, 'some full text', 4)
     end
     def test_update_target
@@ -334,9 +336,9 @@ module ODBA
       @storage.should_receive(:fulltext_index_delete)\
         .with('index', 4, 'target_id')
       @storage.should_receive(:update_fulltext_index)\
-        .with('index', 1, 'fulltext term', 4, 'german')
+        .with('index', 1, 'fulltext term', 4)
       @storage.should_receive(:update_fulltext_index)\
-        .with('index', 2, 'fulltext term', 4, 'german')
+        .with('index', 2, 'fulltext term', 4)
       target = Target.new
       target.odba_id = 4
       origin1 = Origin.new
@@ -356,9 +358,9 @@ module ODBA
       @storage.should_receive(:fulltext_index_delete)\
         .times(1).with('index', 1, 'origin_id')
       @storage.should_receive(:update_fulltext_index)\
-        .times(1).with('index', 1, 'fulltext term', 4, 'german')
+        .times(1).with('index', 1, 'fulltext term', 4)
       @storage.should_receive(:update_fulltext_index)\
-        .times(1).with('index', 1, 'fulltext term', 5, 'german')
+        .times(1).with('index', 1, 'fulltext term', 5)
       target = Target.new
       target.odba_id = 4
       origin1 = Origin.new

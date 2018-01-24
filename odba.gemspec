@@ -16,10 +16,11 @@ Gem::Specification.new do |spec|
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.add_dependency 'ydbi',   '>=0.5.1'
-  spec.add_dependency 'ydbd-pg','>=0.5.1'
+  spec.add_dependency 'sequel'
+  spec.add_dependency 'pg','>=1.0.0'
 
   spec.add_development_dependency "bundler"
+  spec.add_development_dependency "sqlite3" # for running the tests
   spec.add_development_dependency "rake"
   spec.add_development_dependency "flexmock"
   spec.add_development_dependency "simplecov", '>= 0.14.1'

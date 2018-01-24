@@ -301,11 +301,9 @@ module ODBA
 		def test_odba_store_error_raised
 			@odba.odba_name = "foo"
       ODBA.cache.should_receive(:store).with(FlexMock.any).and_return { |dump|
-				raise DBI::ProgrammingError
+				raise Sequel::Error
 			}
-			assert_raises(DBI::ProgrammingError) {
-				@odba.odba_store('baz')
-			}
+			assert_raises(Sequel::Error) { @odba.odba_store('baz') }
 			assert_equal("foo", @odba.odba_name)
 		end
 		def test_odba_store_no_error_raised

@@ -5,7 +5,7 @@
 
 require 'thread'
 require 'singleton'
-require 'dbi'
+require 'sequel'
 
 module ODBA
 	class Storage # :nodoc: all
@@ -14,36 +14,13 @@ module ODBA
 		BULK_FETCH_STEP = 2500
     TABLES = [
       # in table 'object', the isolated dumps of all objects are stored
-      ['object', <<-'SQL'],
-CREATE TABLE IF NOT EXISTS object (
-  odba_id INTEGER NOT NULL, content TEXT,
-  name TEXT, prefetchable BOOLEAN, extent TEXT,
-  PRIMARY KEY(odba_id), UNIQUE(name)
-);
-      SQL
-      ['prefetchable_index', <<-SQL],
-CREATE INDEX IF NOT EXISTS prefetchable_index ON object(prefetchable);
-      SQL
-      ['extent_index', <<-SQL],
-CREATE INDEX IF NOT EXISTS extent_index ON object(extent);
-      SQL
-      # helper table 'object_connection'
-      ['object_connection', <<-'SQL'],
-CREATE TABLE IF NOT EXISTS object_connection (
-  origin_id integer, target_id integer,
-  PRIMARY KEY(origin_id, target_id)
-);
-      SQL
-      ['target_id_index', <<-SQL],
-CREATE INDEX IF NOT EXISTS target_id_index ON object_connection(target_id);
-      SQL
+      ['object',              "CREATE TABLE IF NOT EXISTS object (odba_id INTEGER NOT NULL, content TEXT, name TEXT, prefetchable BOOLEAN, extent TEXT, PRIMARY KEY(odba_id), UNIQUE(name));" ],
+      ['prefetchable_index',  "CREATE INDEX IF NOT EXISTS prefetchable_index ON object(prefetchable);" ],
+      ['extent_index',        "CREATE INDEX IF NOT EXISTS extent_index ON object(extent);"],
+      ['object_connection',   "CREATE TABLE IF NOT EXISTS object_connection (origin_id integer, target_id integer, PRIMARY KEY(origin_id, target_id));"],
+      ['target_id_index',     "CREATE INDEX IF NOT EXISTS target_id_index ON object_connection(target_id);"],
       # helper table 'collection'
-      ['collection', <<-'SQL'],
-CREATE TABLE IF NOT EXISTS collection (
-  odba_id integer NOT NULL, key text, value text,
-  PRIMARY KEY(odba_id, key)
-);
-      SQL
+      ['collection',          "CREATE TABLE IF NOT EXISTS collection (odba_id integer NOT NULL, key text, value text, PRIMARY KEY(odba_id, key));"],
     ]
 		def initialize
 			@id_mutex = Mutex.new
@@ -73,13 +50,13 @@ CREATE TABLE IF NOT EXISTS collection (
       row.first unless row.nil?
     end
     def collection_remove(odba_id, key_dump)
-      self.dbi.do <<-SQL, odba_id, key_dump
+      self.dbi.fetch <<-SQL, odba_id, key_dump
         DELETE FROM collection
         WHERE odba_id = ? AND key = ?
       SQL
     end
     def collection_store(odba_id, key_dump, value_dump)
-      self.dbi.do <<-SQL, odba_id, key_dump, value_dump
+      self.dbi.fetch <<-SQL, odba_id, key_dump, value_dump
         INSERT INTO collection (odba_id, key, value)
         VALUES (?, ?, ?)
       SQL
@@ -101,7 +78,7 @@ CREATE TABLE IF NOT EXISTS collection (
         sql << " AND target_id = ?"
         values << target_id
       end
-      self.dbi.do sql, origin_id, *values
+      self.dbi.fetch sql, origin_id, *values
     end
     def condition_index_ids(index_name, id, id_name)
       sql = <<-SQL
@@ -112,7 +89,7 @@ CREATE TABLE IF NOT EXISTS collection (
       self.dbi.select_all(sql, id)
     end
     def create_dictionary_map(language)
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
         ALTER TEXT SEARCH CONFIGURATION default_#{language}
         ALTER MAPPING FOR
           asciiword, asciihword, hword_asciipart,
@@ -120,158 +97,94 @@ CREATE TABLE IF NOT EXISTS collection (
           numword, numhword
         WITH #{language}_ispell, #{language}_stem;
       SQL
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
         ALTER TEXT SEARCH CONFIGURATION default_#{language}
         ALTER MAPPING FOR
           host, file, int, uint, version
         WITH simple;
       SQL
       # drop from default setting
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
       ALTER TEXT SEARCH CONFIGURATION default_#{language}
           DROP MAPPING FOR
           email, url, url_path, sfloat, float
       SQL
     end
     def create_condition_index(table_name, definition)
-      self.dbi.do <<-SQL
-CREATE TABLE IF NOT EXISTS #{table_name} (
-  origin_id INTEGER,
-  #{definition.collect { |*pair| pair.join(' ') }.join(",\n  ") },
-  target_id INTEGER
-);
-      SQL
+      self.dbi.fetch "CREATE TABLE IF NOT EXISTS #{table_name} ( origin_id INTEGER,  #{definition.collect { |*pair| pair.join(' ') }.join(",\n  ") }, target_id INTEGER);"
       #index origin_id
-      self.dbi.do <<-SQL
-CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id);
-      SQL
+      self.dbi.fetch "CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id);"
       #index search_term
       definition.each { |name, datatype|
-        self.dbi.do <<-SQL
-CREATE INDEX IF NOT EXISTS #{name}_#{table_name} ON #{table_name}(#{name});
-        SQL
+        self.dbi.fetch "CREATE INDEX IF NOT EXISTS #{name}_#{table_name} ON #{table_name}(#{name});"
       }
       #index target_id
-      self.dbi.do <<-SQL
-CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
-      SQL
+      self.dbi.fetch "CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);"
     end
     def create_fulltext_index(table_name)
-      self.dbi.do <<-SQL
-DROP TABLE IF EXISTS #{table_name};
-      SQL
-      self.dbi.do <<-SQL
-CREATE TABLE IF NOT EXISTS #{table_name}  (
-  origin_id INTEGER,
-  search_term tsvector,
-  target_id INTEGER
-) WITH OIDS ;
-      SQL
+      self.dbi.fetch "DROP TABLE IF EXISTS #{table_name};"
+      self.dbi.fetch "CREATE TABLE IF NOT EXISTS #{table_name}  (origin_id INTEGER, search_term tsvector, target_id INTEGER) WITH OIDS ;"
       #index origin_id
-      self.dbi.do <<-SQL
-CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id);
-      SQL
-      self.dbi.do <<-SQL
-CREATE INDEX IF NOT EXISTS search_term_#{table_name}
-ON #{table_name} USING gist(search_term);
-      SQL
+      self.dbi.fetch "CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id);"
+      self.dbi.fetch "CREATE INDEX IF NOT EXISTS search_term_#{table_name} ON #{table_name} USING gist(search_term);"
       #index target_id
-      self.dbi.do <<-SQL
-CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
-      SQL
+      self.dbi.fetch "CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);"
     end
     def create_index(table_name)
-      self.dbi.do <<-SQL
-        DROP TABLE IF EXISTS #{table_name};
-      SQL
-      self.dbi.do <<-SQL
-        CREATE TABLE IF NOT EXISTS #{table_name} (
-          origin_id INTEGER,
-          search_term TEXT,
-          target_id INTEGER
-        )  WITH OIDS;
-      SQL
+      self.dbi.fetch("DROP TABLE IF EXISTS #{table_name};")
+      self.dbi.fetch("CREATE TABLE IF NOT EXISTS #{table_name} (origin_id INTEGER, search_term TEXT, target_id INTEGER)  WITH OIDS;")
       #index origin_id
-      self.dbi.do <<-SQL
-        CREATE INDEX IF NOT EXISTS origin_id_#{table_name}
-        ON #{table_name}(origin_id)
-      SQL
+      self.dbi.fetch("CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id)")
       #index search_term
-      self.dbi.do <<-SQL
-        CREATE INDEX IF NOT EXISTS search_term_#{table_name}
-        ON #{table_name}(search_term)
-      SQL
-      #index target_id
-      self.dbi.do <<-SQL
-        CREATE INDEX IF NOT EXISTS target_id_#{table_name}
-        ON #{table_name}(target_id)
-      SQL
+      self.dbi.fetch("CREATE INDEX IF NOT EXISTS search_term_#{table_name} ON #{table_name}(search_term)")
+      self.dbi.fetch("CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id)")
     end
-		def dbi
-			Thread.current[:txn] || @dbi
-		end
-		def drop_index(index_name)
-			self.dbi.do "DROP TABLE IF EXISTS #{index_name}"
-		end
+    def dbi
+      Thread.current[:txn] || @dbi
+    end
+    def drop_index(index_name)
+      self.dbi.fetch "DROP TABLE IF EXISTS #{index_name}"
+    end
     def delete_index_element(index_name, odba_id, id_name)
-      self.dbi.do <<-SQL, odba_id
-        DELETE FROM #{index_name} WHERE #{id_name} = ?
-      SQL
+      sql = %(DELETE FROM #{index_name} WHERE #{id_name} = "?")
+      self.dbi.fetch(sql, odba_id)
     end
-		def delete_persistable(odba_id)
+    def delete_persistable(odba_id)
       # delete origin from connections
-			self.dbi.do <<-SQL, odba_id
-				DELETE FROM object_connection WHERE origin_id = ?
-			SQL
+      self.dbi.fetch("DELETE FROM object_connection WHERE origin_id = ?", odba_id)
       # delete target from connections
-			self.dbi.do <<-SQL, odba_id
-				DELETE FROM object_connection WHERE target_id = ?
-			SQL
-      # delete from collections
-			self.dbi.do <<-SQL, odba_id
-				DELETE FROM collection WHERE odba_id = ?
-			SQL
-      # delete from objects
-			self.dbi.do <<-SQL, odba_id
-				DELETE FROM object WHERE odba_id = ?
-			SQL
-		end
+      self.dbi.fetch("DELETE FROM object_connection WHERE target_id = ?", odba_id)
+      self.dbi.fetch("DELETE FROM collection WHERE target_id = ?", odba_id)
+      self.dbi.fetch("DELETE FROM object WHERE target_id = ?", odba_id)
+    end
     def ensure_object_connections(origin_id, target_ids)
-      sql = <<-SQL
-        SELECT target_id FROM object_connection
-        WHERE origin_id = ?
-      SQL
-      target_ids.uniq!
-      update_ids = target_ids
-      old_ids = []
-      ## use self.dbi instead of @dbi to get information about
-      ## object_connections previously stored within this transaction
-      if(rows = self.dbi.select_all(sql, origin_id))
-        old_ids = rows.collect { |row| row[0] }
-        old_ids.uniq!
-        delete_ids = old_ids - target_ids
-        update_ids = target_ids - old_ids
-        unless(delete_ids.empty?)
-          while(!(ids = delete_ids.slice!(0, BULK_FETCH_STEP)).empty?)
-            self.dbi.do <<-SQL, origin_id
-              DELETE FROM object_connection
-              WHERE origin_id = ? AND target_id IN (#{ids.join(',')})
-            SQL
+      self.dbi.transaction do
+        sql = "SELECT target_id FROM object_connection WHERE origin_id = ?"
+        target_ids.uniq!
+        update_ids = target_ids
+        old_ids = []
+        ## use self.dbi instead of @dbi to get information about
+        ## object_connections previously stored within this transaction
+        if(rows = self.dbi.fetch(sql, origin_id))
+          old_ids = rows.collect { |row| row[0] }
+          old_ids.uniq!
+          delete_ids = old_ids - target_ids
+          update_ids = target_ids - old_ids
+          unless(delete_ids.empty?)
+            while(!(ids = delete_ids.slice!(0, BULK_FETCH_STEP)).empty?)
+              sql = "DELETE FROM object_connection WHERE origin_id = ? AND target_id IN (#{ids.join(',')})"
+              self.dbi.fetch(sql, origin_id)
+            end
           end
         end
-      end
-      sth = self.dbi.prepare <<-SQL
-        INSERT INTO object_connection (origin_id, target_id)
-        VALUES (?, ?)
-      SQL
-      update_ids.each { |id|
-        sth.execute(origin_id, id)
-      }
-      sth.finish
+        update_ids.each do |target_id|
+          self.dbi.fetch("INSERT INTO object_connection (origin_id, target_id) VALUES (?, ?)", origin_id, target_id)
+        end
+      end # transaction
     end
     def ensure_target_id_index(table_name)
       #index target_id
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
         CREATE INDEX IF NOT EXISTS target_id_#{table_name}
         ON #{table_name}(target_id)
       SQL
@@ -288,13 +201,19 @@ CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
       EOQ
     end
     def fulltext_index_delete(index_name, id, id_name)
-      self.dbi.do <<-SQL, id
+      self.dbi.fetch <<-SQL, id
         DELETE FROM #{index_name}
         WHERE #{id_name} = ?
       SQL
     end
     def get_server_version
-      /\s([\d\.]+)\s/.match(self.dbi.select_all("select version();").first.first)[1]
+      if self.dbi.database_type.eql?(:sqlite)
+        string = self.dbi.fetch("select sqlite_version();").first.values.first
+      elsif self.dbi.database_type.eql?(:postgres)
+        string = self.dbi.fetch("select version();").first.values.first
+      else 
+        raise "Don't know howto get version of database for #{ self.dbi.database_type}"
+      end
     end
     def fulltext_index_target_ids(index_name, origin_id)
       sql = <<-SQL
@@ -311,17 +230,17 @@ CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
       # As we have no way to get the current installation path, we do not check whether the files are present or not
       file='fulltext'
       # setup configuration
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
         DROP TEXT SEARCH DICTIONARY IF EXISTS  public.default_#{language};
       SQL
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
         CREATE TEXT SEARCH CONFIGURATION public.default_#{language} ( COPY = pg_catalog.#{language} );
       SQL
       # ispell
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
         DROP TEXT SEARCH DICTIONARY IF EXISTS  #{language}_ispell;
       SQL
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
         CREATE TEXT SEARCH DICTIONARY #{language}_ispell (
           TEMPLATE  = ispell,
           DictFile  = #{language}_#{file},
@@ -333,14 +252,14 @@ CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
       create_dictionary_map(language)
     end
     def index_delete_origin(index_name, odba_id, term)
-      self.dbi.do <<-SQL, odba_id, term
+      self.dbi.fetch <<-SQL, odba_id, term
         DELETE FROM #{index_name} 
         WHERE origin_id = ?
         AND search_term = ?
       SQL
     end
     def index_delete_target(index_name, origin_id, search_term, target_id)
-      self.dbi.do <<-SQL, origin_id, search_term, target_id
+      self.dbi.fetch <<-SQL, origin_id, search_term, target_id
         DELETE FROM #{index_name} 
         WHERE origin_id = ?
         AND search_term = ?
@@ -381,7 +300,7 @@ CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
         FROM #{index_name}
         WHERE target_id=?
       SQL
-      self.dbi.select_all(sql, target_id)
+      self.dbi.select_all(sql, target_id) if self.dbi
     end
     def index_target_ids(index_name, origin_id)
       sql = <<-SQL
@@ -421,11 +340,11 @@ CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
     end
     def remove_dictionary(language)
       # remove configuration
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
         DROP TEXT SEARCH CONFIGURATION IF EXISTS default_#{language}
       SQL
       # remove ispell dictionaries
-      self.dbi.do <<-SQL
+      self.dbi.fetch <<-SQL
         DROP TEXT SEARCH DICTIONARY IF EXISTS #{language}_ispell;
       SQL
     end
@@ -491,8 +410,8 @@ CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
         sql << " LIMIT #{limit}"
       end
 			self.dbi.select_all(sql, term, term)
-		rescue DBI::ProgrammingError => e
-			warn("ODBA::Storage.retrieve_from_fulltext_index rescued a DBI::ProgrammingError(#{e.message}). Query:")
+		rescue Sequel::Error => e
+			warn("ODBA::Storage.retrieve_from_fulltext_index rescued a Sequel::Error(#{e.message}). Query:")
 			warn("self.dbi.select_all(#{sql}, #{term}, #{term})")
 			warn("returning empty result")
 			[]
@@ -519,8 +438,7 @@ CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
 			EOQ
 		end
 		def restore_named(name)
-			row = self.dbi.select_one("SELECT content FROM object WHERE name = ?", 
-				name)
+			row = self.dbi.fetch("SELECT content FROM object WHERE name = ?", name)
 			row.first unless row.nil?
 		end
 		def restore_prefetchable
@@ -529,50 +447,44 @@ CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);
 			EOQ
 		end
     def setup
-      TABLES.each { |name, definition|
-        self.dbi.do(definition) rescue DBI::ProgrammingError
-      }
-      unless(self.dbi.columns('object').any? { |col| col.name == 'extent' })
-        self.dbi.do <<-EOS
-ALTER TABLE object ADD COLUMN extent TEXT;
-CREATE INDEX IF NOT EXISTS extent_index ON object(extent);
-        EOS
+      begin
+      TABLES.each do |name, definition|
+        self.dbi.run(definition) # rescue Sequel::Error
+      end
+      columns = self.dbi.schema(:object).collect{|x| x.first }
+
+      unless(columns.index(:extent))
+        self.dbi.fetch("ALTER TABLE object ADD COLUMN extent TEXT; CREATE INDEX IF NOT EXISTS extent_index ON object(extent);")
+                         end
+      rescue => error
+      raise "ODBA setup failed"
+                         end
+
+    end
+    def store(odba_id, dump, name, prefetchable, klass)
+      sql = "SELECT name FROM object WHERE odba_id = ?;"
+      if(row = self.dbi.fetch(sql, odba_id))
+        name ||= row['name']
+        self.dbi.fetch("UPDATE object SET content = ?, name = ?, prefetchable = ?, extent = ? WHERE odba_id = ?", dump, name, prefetchable, klass.to_s, odba_id)
+      else
+        self.dbi.fetch("INSERT INTO object (odba_id, content, name, prefetchable, extent) VALUES (?, ?, ?, ?, ?)", odba_id, dump, name, prefetchable, klass.to_s)
       end
     end
-		def store(odba_id, dump, name, prefetchable, klass)
-			sql = "SELECT name FROM object WHERE odba_id = ?"
-			if(row = self.dbi.select_one(sql, odba_id))
-				name ||= row['name']
-				self.dbi.do <<-SQL, dump, name, prefetchable, klass.to_s, odba_id
-					UPDATE object SET 
-					content = ?,
-					name = ?,
-					prefetchable = ?,
-          extent = ?
-					WHERE odba_id = ?
-				SQL
-			else
-				self.dbi.do <<-SQL, odba_id, dump, name, prefetchable, klass.to_s
-					INSERT INTO object (odba_id, content, name, prefetchable, extent)
-					VALUES (?, ?, ?, ?, ?)
-				SQL
-			end
-		end
-		def transaction(&block)
-			dbi = nil
-			retval = nil
-			@dbi.transaction { |dbi|
+    def transaction(&block)
+      dbi = nil
+      retval = nil
+      @dbi.transaction { |dbi|
         ## this should not be necessary anymore:
-				#dbi['AutoCommit'] = false
-				Thread.current[:txn] = dbi
-				retval = block.call
-			}
-			retval
-		ensure
+        #dbi['AutoCommit'] = false
+        Thread.current[:txn] = dbi
+        retval = block.call
+      }
+      retval
+    ensure
       ## this should not be necessary anymore:
-			#dbi['AutoCommit'] = true
-			Thread.current[:txn] = nil
-		end
+      #dbi['AutoCommit'] = true
+      Thread.current[:txn] = nil
+    end
     def update_condition_index(index_name, origin_id, search_terms, target_id)
       keys = []
       vals = []
@@ -581,62 +493,44 @@ CREATE INDEX IF NOT EXISTS extent_index ON object(extent);
         vals.push(val)
       }
       if(target_id)
-        self.dbi.do <<-SQL, origin_id, target_id, *vals
-INSERT INTO #{index_name} (origin_id, target_id, #{keys.join(', ')})
-VALUES (?, ?#{', ?' * keys.size})
-        SQL
+        self.dbi.fetch("INSERT INTO #{index_name} (origin_id, target_id, #{keys.join(', ')}) VALUES (?, ?#{', ?' * keys.size})",
+                        origin_id, target_id, *vals)
       else
         key_str = keys.collect { |key| "#{key}=?" }.join(', ')
-        self.dbi.do <<-SQL, *(vals.push(origin_id))
-UPDATE #{index_name} SET #{key_str}
-WHERE origin_id = ?
-        SQL
+        self.dbi.fetch("UPDATE #{index_name} SET #{key_str} WHERE origin_id = ?", *(vals.push(origin_id)))
       end
     end
     def update_fulltext_index(index_name, origin_id, search_term, target_id)
       search_term = search_term.gsub(/\s+/, ' ').strip
       if(target_id)
-                         value = <<-SQL, origin_id.to_s, search_term, target_id
-INSERT INTO #{index_name} (origin_id, search_term, target_id)
-VALUES (?, to_tsvector(?), ?)
-        SQL
-        result = self.dbi.do <<-SQL, origin_id.to_s, search_term, target_id
-INSERT INTO #{index_name} (origin_id, search_term, target_id)
-VALUES (?, to_tsvector(?), ?)
-        SQL
+        result = self.dbi.fetch("INSERT INTO #{index_name} (origin_id, search_term, target_id) VALUES (?, to_tsvector(?), ?)", origin_id.to_s, search_term, target_id)
       else
-        result = self.dbi.do <<-SQL, search_term, origin_id
-UPDATE #{index_name} SET search_term=to_tsvector(?)
-WHERE origin_id=?
-        SQL
+        result = self.dbi.fetch("UPDATE #{index_name} SET search_term=to_tsvector(?) WHERE origin_id=?", search_term, origin_id)
       end
-      end
-		def update_index(index_name, origin_id, search_term, target_id)
+    end
+    def update_index(index_name, origin_id, search_term, target_id)
       if(target_id)
-        self.dbi.do <<-SQL, origin_id, search_term, target_id
+        self.dbi.fetch <<-SQL, origin_id, search_term, target_id
           INSERT INTO #{index_name} (origin_id, search_term, target_id) 
           VALUES (?, ?, ?)
         SQL
       else
-        self.dbi.do <<-SQL, search_term, origin_id
-          UPDATE #{index_name} SET search_term=?
-          WHERE origin_id=?
-        SQL
+        self.dbi.fetch("UPDATE #{index_name} SET search_term=? WHERE origin_id=?",  search_term, origin_id)
       end
-		end
-		private
+    end
+    private
     def ensure_next_id_set
       if(@next_id.nil?)
         @next_id = restore_max_id
       end
     end
-		def restore_max_id
-			row = self.dbi.select_one("SELECT odba_id FROM object ORDER BY odba_id DESC LIMIT 1")
-			unless(row.nil? || row.first.nil?)
-				row.first
-			else
-				0
-			end
-		end
-	end
+    def restore_max_id
+      row = self.dbi.fetch("SELECT odba_id FROM object ORDER BY odba_id DESC LIMIT 1").first
+      unless(row.nil? || row.first.nil?)
+        row.first
+      else
+        0
+      end
+    end
+  end
 end

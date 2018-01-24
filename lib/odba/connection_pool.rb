@@ -3,7 +3,7 @@
 # ODBA::ConnectionPool -- odba -- 08.12.2011 -- mhatakeyama@ywesee.com
 # ODBA::ConnectionPool -- odba -- 08.03.2005 -- hwyss@ywesee.com
 
-require 'dbi'
+require 'sequel'
 require 'thread'
 
 module ODBA
@@ -20,6 +20,9 @@ module ODBA
 			@connections = []
 			@mutex = Mutex.new
 			connect
+#migel/lib/migel/persistence/odba.rb
+# ODBA.storage.dbi = ODBA::ConnectionPool.new("DBI:Pg:#{@config.db_name}", @config.db_user, @config.db_auth)
+      
 		end
 		def next_connection # :nodoc:
 			conn = nil
@@ -38,9 +41,9 @@ module ODBA
 				next_connection { |conn|
 					conn.send(method, *args, &block)
 				}
-			rescue NoMethodError, DBI::Error => e
+			rescue NoMethodError, Sequel::Error => e
         warn e
-				if(tries > 0 && (!e.is_a?(DBI::ProgrammingError) \
+				if(tries > 0 && (!e.is_a?(Sequel::Error) \
            || e.message == 'no connection to the server'))
 					sleep(SETUP_RETRIES - tries)
 					tries -= 1
@@ -55,12 +58,14 @@ module ODBA
 			@connections.size
 		end
     alias :pool_size :size
+    @last_connected
 		def connect # :nodoc:
 			@mutex.synchronize { _connect }
 		end
     def _connect # :nodoc:
       POOL_SIZE.times {
-        conn = DBI.connect(*@dbi_args)
+        conn = Sequel.connect(*@dbi_args)
+        @last_connected = conn
         if encoding = @opts[:client_encoding]
           conn.execute "SET CLIENT_ENCODING TO '#{encoding}'"
         end
@@ -74,7 +79,8 @@ module ODBA
 			while(conn = @connections.shift)
 				begin 
 					conn.disconnect
-				rescue DBI::InterfaceError, Exception
+				rescue Sequel::Error, SQLite3::SQLException, Exception => error
+          puts "Got an error #{error}" 
 					## we're not interested, since we are disconnecting anyway
           nil
 				end
