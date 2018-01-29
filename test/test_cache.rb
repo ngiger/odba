@@ -12,8 +12,9 @@ require 'odba/cache_entry'
 require 'odba/persistable'
 require 'odba/index'
 require 'odba/index_definition'
-require 'odba/odba_error'
 require 'odba/odba'
+require 'odba/storage'
+require 'odba/marshal'
 
 module ODBA
 	class Cache
@@ -31,8 +32,11 @@ module ODBA
 		 attr_accessor	:odba_connection, :odba_id
 		end
 		def setup
-			@storage = ODBA.storage = flexmock("storage")
-			@marshal = ODBA.marshaller = flexmock("marshaller")
+			@marshal = flexmock('marshal')
+			@storage = flexmock("storage", ODBA.storage)
+      @dbi = flexmock('dbi', Sequel.sqlite)
+      @storage.dbi = @dbi
+      @storage.setup
 			ODBA.cache = @cache = ODBA::Cache.instance
 			@cache.fetched = {}
 			@cache.prefetched = {}
@@ -47,12 +51,14 @@ module ODBA
 			@cache.indices.clear
 		end
 		def test_fetch_named_ok
+      @cache.fetched.store(1, 'dummy')
+
 			obj = flexmock
 			obj.instance_variable_set("@odba_name", 'the_name')
 			obj.instance_variable_set("@odba_id", 2)
-      @marshal.should_receive(:load).with('dump2').and_return(obj)
-			@storage.should_receive(:restore_named).and_return('dump2')
-			@storage.should_receive(:restore_collection).and_return([])
+      # @marshal.should_receive(:load).with('dump2').and_return(obj)
+			# @storage.should_receive(:restore_named).and_return('dump2')
+			# @storage.should_receive(:restore_collection).and_return([])
 			load_1 = @cache.fetch_named('the_name', nil)
 			assert_instance_of(FlexMock, load_1)
 			assert_equal('the_name', load_1.odba_name)

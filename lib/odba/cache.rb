@@ -52,7 +52,7 @@ module ODBA
 				end
 			}
 			bulk_fetch_ids -= loaded_ids
-			unless(bulk_fetch_ids.empty?)
+			unless(bulk_fetch_ids.nil?)
 				rows = ODBA.storage.bulk_restore(bulk_fetch_ids)
 				instances += bulk_restore(rows, odba_caller)
 			end

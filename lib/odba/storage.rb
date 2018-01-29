@@ -26,7 +26,7 @@ module ODBA
 			@id_mutex = Mutex.new
 		end
 		def bulk_restore(bulk_fetch_ids)
-			if(bulk_fetch_ids.empty?)
+			if(bulk_fetch_ids.nil? || bulk_fetch_ids.is_a?(Sequel::SQL::NumericExpression))
 				[]
 			else
 				bulk_fetch_ids = bulk_fetch_ids.uniq
@@ -36,7 +36,7 @@ module ODBA
 						SELECT odba_id, content FROM object 
 						WHERE odba_id IN (#{ids.join(',')})
 					SQL
-					rows.concat(self.dbi.select_all(sql))
+					rows.concat(self.dbi.fetch(sql))
 				end
 				rows
 			end
@@ -86,10 +86,10 @@ module ODBA
         FROM #{index_name}
         WHERE #{id_name}=?
       SQL
-      self.dbi.select_all(sql, id)
+      self.dbi.fetch(sql, id)
     end
     def create_dictionary_map(language)
-      self.dbi.fetch <<-SQL
+      self.dbi.run <<-SQL
         ALTER TEXT SEARCH CONFIGURATION default_#{language}
         ALTER MAPPING FOR
           asciiword, asciihword, hword_asciipart,
@@ -97,53 +97,53 @@ module ODBA
           numword, numhword
         WITH #{language}_ispell, #{language}_stem;
       SQL
-      self.dbi.fetch <<-SQL
+      self.dbi.run <<-SQL
         ALTER TEXT SEARCH CONFIGURATION default_#{language}
         ALTER MAPPING FOR
           host, file, int, uint, version
         WITH simple;
       SQL
       # drop from default setting
-      self.dbi.fetch <<-SQL
+      self.dbi.run <<-SQL
       ALTER TEXT SEARCH CONFIGURATION default_#{language}
           DROP MAPPING FOR
           email, url, url_path, sfloat, float
       SQL
     end
     def create_condition_index(table_name, definition)
-      self.dbi.fetch "CREATE TABLE IF NOT EXISTS #{table_name} ( origin_id INTEGER,  #{definition.collect { |*pair| pair.join(' ') }.join(",\n  ") }, target_id INTEGER);"
+      self.dbi.run "CREATE TABLE IF NOT EXISTS #{table_name} ( origin_id INTEGER,  #{definition.collect { |*pair| pair.join(' ') }.join(",\n  ") }, target_id INTEGER);"
       #index origin_id
-      self.dbi.fetch "CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id);"
+      self.dbi.run "CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id);"
       #index search_term
       definition.each { |name, datatype|
-        self.dbi.fetch "CREATE INDEX IF NOT EXISTS #{name}_#{table_name} ON #{table_name}(#{name});"
+        self.dbi.run "CREATE INDEX IF NOT EXISTS #{name}_#{table_name} ON #{table_name}(#{name});"
       }
       #index target_id
-      self.dbi.fetch "CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);"
+      self.dbi.run "CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);"
     end
     def create_fulltext_index(table_name)
-      self.dbi.fetch "DROP TABLE IF EXISTS #{table_name};"
-      self.dbi.fetch "CREATE TABLE IF NOT EXISTS #{table_name}  (origin_id INTEGER, search_term tsvector, target_id INTEGER) WITH OIDS ;"
+      self.dbi.run "DROP TABLE IF EXISTS #{table_name};"
+      self.dbi.run "CREATE TABLE IF NOT EXISTS #{table_name}  (origin_id INTEGER, search_term tsvector, target_id INTEGER) WITH OIDS ;"
       #index origin_id
-      self.dbi.fetch "CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id);"
-      self.dbi.fetch "CREATE INDEX IF NOT EXISTS search_term_#{table_name} ON #{table_name} USING gist(search_term);"
+      self.dbi.run "CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id);"
+      self.dbi.run "CREATE INDEX IF NOT EXISTS search_term_#{table_name} ON #{table_name} USING gist(search_term);"
       #index target_id
-      self.dbi.fetch "CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);"
+      self.dbi.run "CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id);"
     end
     def create_index(table_name)
-      self.dbi.fetch("DROP TABLE IF EXISTS #{table_name};")
-      self.dbi.fetch("CREATE TABLE IF NOT EXISTS #{table_name} (origin_id INTEGER, search_term TEXT, target_id INTEGER)  WITH OIDS;")
+      self.dbi.execute("DROP TABLE IF EXISTS #{table_name};")
+      self.dbi.execute("CREATE TABLE IF NOT EXISTS #{table_name} (origin_id INTEGER, search_term TEXT, target_id INTEGER)  WITH OIDS;")
       #index origin_id
-      self.dbi.fetch("CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id)")
+      self.dbi.execute("CREATE INDEX IF NOT EXISTS origin_id_#{table_name} ON #{table_name}(origin_id)")
       #index search_term
-      self.dbi.fetch("CREATE INDEX IF NOT EXISTS search_term_#{table_name} ON #{table_name}(search_term)")
-      self.dbi.fetch("CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id)")
+      self.dbi.execute("CREATE INDEX IF NOT EXISTS search_term_#{table_name} ON #{table_name}(search_term)")
+      self.dbi.execute("CREATE INDEX IF NOT EXISTS target_id_#{table_name} ON #{table_name}(target_id)")
     end
     def dbi
       Thread.current[:txn] || @dbi
     end
     def drop_index(index_name)
-      self.dbi.fetch "DROP TABLE IF EXISTS #{index_name}"
+      self.dbi.run "DROP TABLE IF EXISTS #{index_name}"
     end
     def delete_index_element(index_name, odba_id, id_name)
       sql = %(DELETE FROM #{index_name} WHERE #{id_name} = "?")
@@ -151,6 +151,11 @@ module ODBA
     end
     def delete_persistable(odba_id)
       # delete origin from connections
+        unless self.dbi
+          puts "Unable to ensure_object_connections as dbi is nil"
+          require 'pry'; binding.pry
+          return
+        end
       self.dbi.fetch("DELETE FROM object_connection WHERE origin_id = ?", odba_id)
       # delete target from connections
       self.dbi.fetch("DELETE FROM object_connection WHERE target_id = ?", odba_id)
@@ -165,6 +170,10 @@ module ODBA
         old_ids = []
         ## use self.dbi instead of @dbi to get information about
         ## object_connections previously stored within this transaction
+        unless self.dbi
+          puts "Unable to ensure_object_connections as dbi is nil"
+          return
+        end
         if(rows = self.dbi.fetch(sql, origin_id))
           old_ids = rows.collect { |row| row[0] }
           old_ids.uniq!
@@ -196,15 +205,10 @@ module ODBA
       EOQ
     end
     def extent_ids(klass)
-      self.dbi.select_all(<<-EOQ, klass.to_s).flatten
-        SELECT odba_id FROM object WHERE extent = ?
-      EOQ
+      self.dbi.fetch("SELECT odba_id FROM object WHERE extent = ?", klass.to_s)
     end
     def fulltext_index_delete(index_name, id, id_name)
-      self.dbi.fetch <<-SQL, id
-        DELETE FROM #{index_name}
-        WHERE #{id_name} = ?
-      SQL
+      self.dbi.fetch("DELETE FROM #{index_name} WHERE #{id_name} = ?", id)
     end
     def get_server_version
       if self.dbi.database_type.eql?(:sqlite)
@@ -221,7 +225,7 @@ module ODBA
         FROM #{index_name}
         WHERE origin_id=?
       SQL
-      self.dbi.select_all(sql, origin_id)
+      self.dbi.fetch(sql, origin_id)
     end
     def generate_dictionary(language)
       # postgres searches for the dictionary file in the directory share/tsearch_data of it installation location
@@ -277,7 +281,7 @@ module ODBA
         FROM #{index_name}
         ORDER BY key
       SQL
-      self.dbi.select_all(sql).flatten
+      self.dbi.fetch(sql).flatten
     end
     def index_matches(index_name, substring, limit=nil, offset=0)
       sql = <<-SQL
@@ -292,7 +296,7 @@ module ODBA
       if offset > 0
         sql << "OFFSET #{offset}\n"
       end
-      self.dbi.select_all(sql, substring + '%').flatten
+      self.dbi.fetch(sql, substring + '%').flatten
     end
     def index_origin_ids(index_name, target_id)
       sql = <<-SQL
@@ -300,7 +304,7 @@ module ODBA
         FROM #{index_name}
         WHERE target_id=?
       SQL
-      self.dbi.select_all(sql, target_id) if self.dbi
+      self.dbi.fetch(sql, target_id) if self.dbi
     end
     def index_target_ids(index_name, origin_id)
       sql = <<-SQL
@@ -308,7 +312,7 @@ module ODBA
         FROM #{index_name}
         WHERE origin_id=?
       SQL
-      self.dbi.select_all(sql, origin_id)
+      self.dbi.fetch(sql, origin_id)
     end
     def max_id
       @id_mutex.synchronize do
@@ -349,7 +353,8 @@ module ODBA
       SQL
     end
 		def restore(odba_id)
-			row = self.dbi.select_one("SELECT content FROM object WHERE odba_id = ?", odba_id)
+      return self.dbi[:object].filter(:odba_id => odba_id).first
+			row = self.dbi.select("SELECT content FROM object WHERE odba_id = ?", odba_id).first
 			row.first unless row.nil?
 		end	
 		def retrieve_connected_objects(target_id)
@@ -357,7 +362,7 @@ module ODBA
 				SELECT origin_id FROM object_connection 
 				WHERE target_id = ?
 			SQL
-			self.dbi.select_all(sql, target_id)
+			self.dbi.fetch(sql, target_id)
 		end
     def retrieve_from_condition_index(index_name, conditions, limit=nil)
       sql = <<-EOQ
@@ -390,7 +395,7 @@ module ODBA
       if(limit)
         sql << " LIMIT #{limit}"
       end
-      self.dbi.select_all(sql, *values)
+      self.dbi.fetch(sql, *values)
     end
 		def retrieve_from_fulltext_index(index_name, search_term, limit=nil)
       ## this combination of gsub statements solves the problem of 
@@ -409,10 +414,10 @@ module ODBA
       if(limit)
         sql << " LIMIT #{limit}"
       end
-			self.dbi.select_all(sql, term, term)
+			self.dbi.fetch(sql, term, term)
 		rescue Sequel::Error => e
 			warn("ODBA::Storage.retrieve_from_fulltext_index rescued a Sequel::Error(#{e.message}). Query:")
-			warn("self.dbi.select_all(#{sql}, #{term}, #{term})")
+			warn("self.dbi.fetch(#{sql}, #{term}, #{term})")
 			warn("returning empty result")
 			[]
 		end
@@ -430,41 +435,41 @@ module ODBA
       if(limit)
         sql << " LIMIT #{limit}"
       end
-      self.dbi.select_all(sql, search_term)	 
+      self.dbi.fetch(sql, search_term)	 
     end
-		def restore_collection(odba_id)
-			self.dbi.select_all <<-EOQ
-				SELECT key, value FROM collection WHERE odba_id = #{odba_id}
-			EOQ
-		end
-		def restore_named(name)
-			row = self.dbi.fetch("SELECT content FROM object WHERE name = ?", name)
-			row.first unless row.nil?
-		end
-		def restore_prefetchable
-			self.dbi.select_all <<-EOQ
-				SELECT odba_id, content FROM object WHERE prefetchable = true
-			EOQ
-		end
+    def restore_collection(odba_id)
+      self.dbi.fetch("SELECT key, value FROM collection WHERE odba_id = #{odba_id}")
+    end
+    def restore_named(name)
+      row = self.dbi.fetch("SELECT content FROM object WHERE name = ?", name)
+      row.first unless row.nil?
+    end
+    def restore_prefetchable
+      self.dbi.fetch("SELECT odba_id, content FROM object WHERE prefetchable = true")
+    end
     def setup
       begin
       TABLES.each do |name, definition|
+                    puts "#{self.dbi} cmd  #{definition}"
         self.dbi.run(definition) # rescue Sequel::Error
       end
       columns = self.dbi.schema(:object).collect{|x| x.first }
 
       unless(columns.index(:extent))
-        self.dbi.fetch("ALTER TABLE object ADD COLUMN extent TEXT; CREATE INDEX IF NOT EXISTS extent_index ON object(extent);")
+        self.dbi.run("ALTER TABLE object ADD COLUMN extent TEXT; CREATE INDEX IF NOT EXISTS extent_index ON object(extent);")
                          end
       rescue => error
-      raise "ODBA setup failed"
-                         end
+                    puts "error #{error}"
+                    puts "back #{error.backtrace.join("\n")}"
+                         require 'pry'; binding.pry
+        raise "ODBA setup failed"
+    end
 
     end
     def store(odba_id, dump, name, prefetchable, klass)
       sql = "SELECT name FROM object WHERE odba_id = ?;"
       if(row = self.dbi.fetch(sql, odba_id))
-        name ||= row['name']
+        name ||= row[:name]
         self.dbi.fetch("UPDATE object SET content = ?, name = ?, prefetchable = ?, extent = ? WHERE odba_id = ?", dump, name, prefetchable, klass.to_s, odba_id)
       else
         self.dbi.fetch("INSERT INTO object (odba_id, content, name, prefetchable, extent) VALUES (?, ?, ?, ?, ?)", odba_id, dump, name, prefetchable, klass.to_s)
@@ -474,9 +479,7 @@ module ODBA
       dbi = nil
       retval = nil
       @dbi.transaction { |dbi|
-        ## this should not be necessary anymore:
-        #dbi['AutoCommit'] = false
-        Thread.current[:txn] = dbi
+#        Thread.current[:txn] = dbi
         retval = block.call
       }
       retval

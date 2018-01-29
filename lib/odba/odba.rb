@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # ODBA -- odba -- 26.01.2007 -- hwyss@ywesee.com
 
+require 'psych'
+
 module ODBA
 	# reader for the Cache server. Defaults to ODBA::Cache.instance
 	def ODBA.cache
@@ -14,6 +16,7 @@ module ODBA
 	def ODBA.marshaller
 		@marshaller ||= ODBA::Marshal
 	end
+  puts "ODBA.marshaller installed"
 	# writer for the Marshaller. Example: override the default Marshaller to
 	# serialize your objects in a custom format (yaml, xml, ...).
 	def ODBA.marshaller=(marshaller)

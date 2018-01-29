@@ -17,7 +17,9 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency 'sequel'
-  spec.add_dependency 'pg','>=1.0.0'
+  spec.add_dependency 'syck'
+  spec.add_dependency 'psych'
+  spec.add_dependency 'sequel_pg'
 
   spec.add_development_dependency "bundler"
   spec.add_development_dependency "sqlite3" # for running the tests

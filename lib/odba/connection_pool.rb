@@ -2,19 +2,20 @@
 # encoding: utf-8
 # ODBA::ConnectionPool -- odba -- 08.12.2011 -- mhatakeyama@ywesee.com
 # ODBA::ConnectionPool -- odba -- 08.03.2005 -- hwyss@ywesee.com
-
+require 'pry'; binding.pry
 require 'sequel'
 require 'thread'
 
 module ODBA
 	class ConnectionPool
-		POOL_SIZE = 5
+		@@POOL_SIZE = 5
 		SETUP_RETRIES = 3
 		#attr_reader :connections
 		attr_reader :connections, :dbi_args
 		# All connections are delegated to DBI. The constructor simply records
 		# the DBI-arguments and reuses them to setup connections when needed.
 		def initialize(*dbi_args)
+      # @@POOL_SIZE = 1 if /sqlite/i.match(dbi_args.to_s)
 			@dbi_args = dbi_args
       @opts = @dbi_args.last.is_a?(Hash) ? @dbi_args.pop : Hash.new
 			@connections = []
@@ -38,9 +39,14 @@ module ODBA
 		def method_missing(method, *args, &block) # :nodoc:
 			tries = SETUP_RETRIES
 			begin
+        if @@POOL_SIZE == 1
+          require 'pry'; binding.pry
+          conn.send(method, *args, &block)
+        else
 				next_connection { |conn|
 					conn.send(method, *args, &block)
 				}
+        end
 			rescue NoMethodError, Sequel::Error => e
         warn e
 				if(tries > 0 && (!e.is_a?(Sequel::Error) \
@@ -63,7 +69,7 @@ module ODBA
 			@mutex.synchronize { _connect }
 		end
     def _connect # :nodoc:
-      POOL_SIZE.times {
+      @@POOL_SIZE.times {
         conn = Sequel.connect(*@dbi_args)
         @last_connected = conn
         if encoding = @opts[:client_encoding]

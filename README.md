@@ -1,5 +1,25 @@
 # odba
 
+## Branch sequel
+
+By Niklaus Giger, Januar 2018
+
+Exploring
+
+* Use sequel instead of ydbi
+* Remaining problems
+** test/test_cache not ported
+** many more errors in unit test with sqlite3
+** Can sqlite3 handle multiple connections ?
+** Marshalling problems when starting migel using a PostgreSQL DB
+*** Adapted lib/migel/persistence/odba.rb to use
+
+    string = 'postgres://localhost/migel?user=ydim&port=5432&password=test'
+    pool = Sequel::ConnectionPool.new(db, :max_connections=>5) { Sequel.connect(string) }
+    ODBA.storage.dbi = pool.db
+
+# Overview
+
 * https://github.com/zdavatz/odba
 
 To see a graphical overview of the Library please see
