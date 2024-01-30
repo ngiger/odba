@@ -9,6 +9,7 @@ Gem::Specification.new do |spec|
   spec.description = "Object Database Access"
   spec.summary     = "Ruby Software for ODDB.org Memory Management"
   spec.homepage    = "https://github.com/zdavatz/odba"
+  spec.metadata["changelog_uri"] = spec.homepage + "/blob/master/History.txt"
   spec.license       = "GPL-v2"
   spec.files         = `git ls-files -z`.split("\x0")
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
