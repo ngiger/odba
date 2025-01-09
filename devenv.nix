@@ -14,6 +14,6 @@
   '';
 
   languages.ruby.enable = true;
-  languages.ruby.versionFile = ./.ruby-version;
+  languages.ruby.version = "3.4";
   # See full reference at https://devenv.sh/reference/options/
 }
