@@ -658,8 +658,8 @@ WHERE origin_id = ?)
 
     def test_condition_index_delete__with_target_id
       flexmock("DBHandle")
-      sql = "DELETE FROM index WHERE origin_id = ? AND c2 = ? AND c1 = ? AND target_id = ?"
-      @dbi.should_receive(:do).once.with(sql.chomp, 3, "f", 7, 4).times(1).and_return(true)
+      sql = "DELETE FROM index WHERE origin_id = ? AND c1 = ? AND c2 = ? AND target_id = ?"
+      @dbi.should_receive(:do).with(sql.chomp, 3, "f", 7, 4).times(1).and_return(true)
       @storage.condition_index_delete("index", 3, {"c1" => "f", "c2" => 7}, 4)
     end
 
