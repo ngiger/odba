@@ -1,8 +1,7 @@
 source "https://rubygems.org"
 
 gemspec
-
-# The group debugger must be disabled for using a matrix build via github/actions
-group :debugger do
-  gem 'pry-byebug'
-end if false
+gem "ydbi", ">=0.5.7",  path: "../ydbi"
+#gem 'ydbd-pg', :path  => "../ydbi/pkg/ydbd-pg-0.6.0"
+# gem 'ydbd-pg', :path  => "../ydbi/pkg"
+#gem 'ydbd-pg', :path  => "../ydbi"
