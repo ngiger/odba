@@ -1,3 +1,8 @@
+=== not yet released
+
+* Added devenv environment
+* changelog_uri,required_ruby_version to gemspec
+
 === 1.1.8 / 10.03.2021
 
 * Removed fixed dependency to pg (is optional like mysql2)
