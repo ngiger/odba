@@ -3,7 +3,7 @@
 # ODBA::ConnectionPool -- odba -- 08.12.2011 -- mhatakeyama@ywesee.com
 # ODBA::ConnectionPool -- odba -- 08.03.2005 -- hwyss@ywesee.com
 
-require 'dbi'
+require 'sequel'
 require 'thread'
 
 module ODBA
@@ -12,8 +12,8 @@ module ODBA
 		SETUP_RETRIES = 3
 		#attr_reader :connections
 		attr_reader :connections, :dbi_args
-		# All connections are delegated to DBI. The constructor simply records
-		# the DBI-arguments and reuses them to setup connections when needed.
+		# All connections are delegated to Sequel. The constructor simply records
+		# the Sequel-arguments and reuses them to setup connections when needed.
 		def initialize(*dbi_args)
 			@dbi_args = dbi_args
       @opts = @dbi_args.last.is_a?(Hash) ? @dbi_args.pop : Hash.new
@@ -38,9 +38,9 @@ module ODBA
 				next_connection { |conn|
 					conn.send(method, *args, &block)
 				}
-			rescue NoMethodError, DBI::Error => e
+			rescue NoMethodError, Sequel::Error => e
         warn e
-				if(tries > 0 && (!e.is_a?(DBI::ProgrammingError) \
+				if(tries > 0 && (!e.is_a?(Sequel::DatabaseConnectionError) \
            || e.message == 'no connection to the server'))
 					sleep(SETUP_RETRIES - tries)
 					tries -= 1
@@ -60,7 +60,7 @@ module ODBA
 		end
     def _connect # :nodoc:
       POOL_SIZE.times {
-        conn = DBI.connect(*@dbi_args)
+        conn = Sequel.connect(*@dbi_args)
         if encoding = @opts[:client_encoding]
           conn.execute "SET CLIENT_ENCODING TO '#{encoding}'"
         end
@@ -74,7 +74,7 @@ module ODBA
 			while(conn = @connections.shift)
 				begin 
 					conn.disconnect
-				rescue DBI::InterfaceError, Exception
+				rescue Sequel::DatabaseError, Exception
 					## we're not interested, since we are disconnecting anyway
           nil
 				end
