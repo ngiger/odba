@@ -23,6 +23,7 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "bundler"
   spec.add_development_dependency "rake"
   spec.add_development_dependency "rspec"
+  spec.add_development_dependency "standard"
   spec.add_development_dependency "flexmock", "2.4.0" # Version 3.0.1 leads to many errors. Do not know why?
   spec.add_development_dependency "minitest"
   spec.add_development_dependency "test-unit"
