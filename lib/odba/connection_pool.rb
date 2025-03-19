@@ -1,63 +1,66 @@
 #!/usr/bin/env ruby
-# encoding: utf-8
+
 # ODBA::ConnectionPool -- odba -- 08.12.2011 -- mhatakeyama@ywesee.com
 # ODBA::ConnectionPool -- odba -- 08.03.2005 -- hwyss@ywesee.com
 
-require 'dbi'
-require 'thread'
+require "dbi"
 
 module ODBA
-	class ConnectionPool
-		POOL_SIZE = 5
-		SETUP_RETRIES = 3
-		#attr_reader :connections
-		attr_reader :connections, :dbi_args
-		# All connections are delegated to DBI. The constructor simply records
-		# the DBI-arguments and reuses them to setup connections when needed.
-		def initialize(*dbi_args)
-			@dbi_args = dbi_args
-      @opts = @dbi_args.last.is_a?(Hash) ? @dbi_args.pop : Hash.new
-			@connections = []
-			@mutex = Mutex.new
-			connect
-		end
-		def next_connection # :nodoc:
-			conn = nil
-			@mutex.synchronize {
-				conn = @connections.shift
-			}
-			yield(conn)
-		ensure
-			@mutex.synchronize {
-				@connections.push(conn)
-			}
-		end
-		def method_missing(method, *args, &block) # :nodoc:
-			tries = SETUP_RETRIES
-			begin
-				next_connection { |conn|
-					conn.send(method, *args, &block)
-				}
-			rescue NoMethodError, DBI::Error => e
+  class ConnectionPool
+    POOL_SIZE = 5
+    SETUP_RETRIES = 3
+    # attr_reader :connections
+    attr_reader :connections, :dbi_args
+    # All connections are delegated to DBI. The constructor simply records
+    # the DBI-arguments and reuses them to setup connections when needed.
+    def initialize(*dbi_args)
+      @dbi_args = dbi_args
+      @opts = @dbi_args.last.is_a?(Hash) ? @dbi_args.pop : {}
+      @connections = []
+      @mutex = Mutex.new
+      connect
+    end
+
+    def next_connection # :nodoc:
+      conn = nil
+      @mutex.synchronize {
+        conn = @connections.shift
+      }
+      yield(conn)
+    ensure
+      @mutex.synchronize {
+        @connections.push(conn)
+      }
+    end
+
+    def method_missing(method, *args, &block) # :nodoc:
+      tries = SETUP_RETRIES
+      begin
+        next_connection { |conn|
+          conn.send(method, *args, &block)
+        }
+      rescue NoMethodError, DBI::Error => e
         warn e
-				if(tries > 0 && (!e.is_a?(DBI::ProgrammingError) \
-           || e.message == 'no connection to the server'))
-					sleep(SETUP_RETRIES - tries)
-					tries -= 1
-					reconnect
-					retry
-				else
-					raise
-				end
-			end
-		end
-		def size 
-			@connections.size
-		end
-    alias :pool_size :size
-		def connect # :nodoc:
-			@mutex.synchronize { _connect }
-		end
+        if tries > 0 && (!e.is_a?(DBI::ProgrammingError) \
+            || e.message == "no connection to the server")
+          sleep(SETUP_RETRIES - tries)
+          tries -= 1
+          reconnect
+          retry
+        else
+          raise
+        end
+      end
+    end
+
+    def size
+      @connections.size
+    end
+    alias_method :pool_size, :size
+    def connect # :nodoc:
+      @mutex.synchronize { _connect }
+    end
+
     def _connect # :nodoc:
       POOL_SIZE.times {
         conn = DBI.connect(*@dbi_args)
@@ -67,24 +70,27 @@ module ODBA
         @connections.push(conn)
       }
     end
-		def disconnect # :nodoc:
-			@mutex.synchronize { _disconnect }
-		end
-		def _disconnect # :nodoc:
-			while(conn = @connections.shift)
-				begin 
-					conn.disconnect
-				rescue DBI::InterfaceError, Exception
-					## we're not interested, since we are disconnecting anyway
+
+    def disconnect # :nodoc:
+      @mutex.synchronize { _disconnect }
+    end
+
+    def _disconnect # :nodoc:
+      while (conn = @connections.shift)
+        begin
+          conn.disconnect
+        rescue DBI::InterfaceError, Exception
+          ## we're not interested, since we are disconnecting anyway
           nil
-				end
-			end
-		end
-		def reconnect # :nodoc:
-			@mutex.synchronize {
-				_disconnect
-				_connect
-			}
-		end
-	end
+        end
+      end
+    end
+
+    def reconnect # :nodoc:
+      @mutex.synchronize {
+        _disconnect
+        _connect
+      }
+    end
+  end
 end
