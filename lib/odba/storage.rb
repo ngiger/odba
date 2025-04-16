@@ -574,9 +574,9 @@ module ODBA
       TABLES.each { |name, definition|
         begin
           dbi.do(definition)
-        rescue
+          $stdout.sync
+        rescue DBI::ProgrammingError
           $stderr = old_stderr
-          DBI::ProgrammingError
         end
       }
       unless dbi.columns("object").any? { |col| col.name == "extent" }

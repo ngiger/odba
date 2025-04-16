@@ -620,6 +620,7 @@ module ODBA
       col = flexmock("Column")
       col.should_receive(:name).and_return("extent")
       @dbi.should_receive(:columns).and_return([col])
+      @dbi.should_receive(:do).and_return(true)
       @storage.setup
     end
 
@@ -639,6 +640,7 @@ module ODBA
       col = flexmock("Column")
       col.should_receive(:name).and_return("extent")
       @dbi.should_receive(:columns).and_return([col])
+      @dbi.should_receive(:do).and_return(true)
       @storage.setup
     end
 
@@ -657,6 +659,7 @@ module ODBA
       col = flexmock("Column")
       col.should_receive(:name).and_return("extent")
       @dbi.should_receive(:columns).and_return([col])
+      @dbi.should_receive(:do).and_return(true)
       @storage.setup
     end
 
@@ -671,6 +674,7 @@ module ODBA
       @dbi.should_receive(:do).once.with(sql).and_return(true)
       @dbi.should_receive(:do).once.with("ALTER TABLE object ADD COLUMN extent TEXT;\nCREATE INDEX IF NOT EXISTS extent_index ON object(extent);\n")
       @dbi.should_receive(:columns).and_return([])
+      @dbi.should_receive(:do).and_return(true)
       @storage.setup
     end
 
