@@ -28,7 +28,7 @@
     enable = true;
     package = pkgs.postgresql_17;
     listen_addresses = "0.0.0.0";
-    port = 5432;
+    port = 5433;
 
     initialDatabases = [
       { name = "odba_test"; }
@@ -44,7 +44,7 @@
     '';
   };
   languages.ruby.enable = true;
-  languages.ruby.version = "3.4";
+  languages.ruby.version = "3.3";
   # See full reference at https://devenv.sh/reference/options/
   enterTest = ''
     devenv up --detach

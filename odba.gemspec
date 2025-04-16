@@ -29,4 +29,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "test-unit"
   spec.add_development_dependency "debug"
   spec.add_development_dependency "simplecov"
+  spec.add_development_dependency 'deep-cover', '~> 0.7'
 end

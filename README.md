@@ -31,6 +31,7 @@ To see a graphical overview of the Library please see
 * The unit test test_clean__prefetched in test/test_cache.rb fails with Ruby 3.3/3.4 sometimes but not always
 * Rework the unit tests to use a test database and less flexmock
 * Rebase the library on the Sequel gem instead of ydbi/ydbd_pg
+* The methods generate_dictionary/create_dictionary_map and do not work using only ODBA
 
 ## Example
 
@@ -55,7 +56,7 @@ You may find this code and some tests which is using this (example)[https://gith
       def self.db_setup
         # connect default storage manager to a relational database  on
         # our localhost using port 5435 with a user odba_test and an empty password
-        ODBA.storage.dbi = ODBA::ConnectionPool.new("DBI:Pg:dbname=odba_test;host=127.0.0.1;port=5432", "odba_test", "")
+        ODBA.storage.dbi = ODBA::ConnectionPool.new("DBI:Pg:dbname=odba_test;host=127.0.0.1;port=5433", "odba_test", "")
         ODBA.cache.setup
       end
 

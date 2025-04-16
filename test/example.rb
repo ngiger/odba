@@ -21,7 +21,7 @@ class Example
   def self.db_setup
     # connect default storage manager to a relational database  on
     # our localhost using port 5435 with a user odba_test and an empty password
-    ODBA.storage.dbi = ODBA::ConnectionPool.new("DBI:Pg:dbname=odba_test;host=127.0.0.1;port=5432", "odba_test", "")
+    ODBA.storage.dbi = ODBA::ConnectionPool.new("DBI:Pg:dbname=odba_test;host=127.0.0.1;port=5433", "odba_test", "")
     ODBA.cache.setup
   end
 
