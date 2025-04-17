@@ -117,9 +117,24 @@ module ODBA
       assert_equal(201, @storage.next_id)
     end
 
+    def test_update_max_id
+      @storage.update_max_id(1)
+      assert_equal(2, @storage.next_id)
+      odba_id = __LINE__
+      dump = "foodump"
+      @storage.store(odba_id, dump, "foo", true, User)
+      assert_equal(3, @storage.next_id)
+      @storage.update_max_id(nil)
+      res = @storage.max_id
+      assert_equal(odba_id, res)
+      assert_equal(odba_id + 1, @storage.next_id)
+      @storage.update_max_id(nil)
+    end
+
     def test_store__1
       odba_id = __LINE__
       dump = "foodump"
+      # def store(odba_id, dump, name, prefetchable, klass)
       @storage.store(odba_id, dump, "foo", true, User)
       res = @storage.restore(odba_id)
       assert_equal(dump, res)
@@ -127,6 +142,27 @@ module ODBA
       @storage.store(odba_id, dump2, "foo", true, User)
       res = @storage.restore(odba_id)
       assert_equal(dump2, res)
+      res = @storage.restore(99999)
+      assert_equal(nil, res)
+      res = @storage.extent_count(User)
+      assert_equal(1, res)
+      @storage.store(odba_id + 1, dump + "_3", "foo_3", true, User)
+      res = @storage.extent_count(User)
+      assert_equal(2, res)
+      @storage.store(odba_id + 2, Date.today.to_s, "date", true, Date)
+      res = @storage.extent_count(User)
+      assert_equal(2, res)
+      res = @storage.extent_count(Date)
+      assert_equal(1, res)
+
+      # Test storing when no name given
+      odba_id_2 = odba_id + 10;
+      res = @storage.store(odba_id_2, dump2, nil, true, User)
+      assert_equal(1, res)
+      res = @storage.restore(odba_id_2)
+      assert_equal(dump2, res)
+      res = @storage.extent_count(User)
+      assert_equal(3, res)
     end
 
     def test_store__3__name_only_set_in_db
@@ -226,8 +262,10 @@ module ODBA
       @storage.ensure_object_connections(origin_id + 1, [target_id])
       res = @storage.retrieve_connected_objects(target_id)
       assert_equal(2, res.size)
+      res = @storage.ensure_object_connections(origin_id + 1, [target_id+1])
+      res = @storage.retrieve_connected_objects(target_id)
+      assert_equal(1, res.size)
       assert(res.find { |x| origin_id == x.first })
-      assert(res.find { |x| origin_id + 1 == x.first })
     end
 
     def test_index_delete_target
@@ -259,7 +297,10 @@ module ODBA
       assert_equal(origin_id, res.first.first)
 
       res = @storage.retrieve_from_fulltext_index(index_name,
-        "(+)-cloprostenolum natricum", "default_german")
+        "(+)-cloprostenolum natricum")
+      assert_equal([], res)
+      res = @storage.retrieve_from_fulltext_index(index_name,
+        "(+)-cloprostenolum natricum", 1)
       assert_equal([], res)
       omit("Why do we not find it here via a fulltext search")
     end
@@ -316,11 +357,55 @@ module ODBA
       assert_equal(expected, @storage.extent_ids(Object))
     end
 
+    def test_collection_restore
+#      def restore_collection(odba_id)
+      odba_id_1 = __LINE__
+      value_1 = "dump"
+      key_1 = "key_1_dump"
+      @storage.collection_store(odba_id_1, key_1, value_1)
+      assert_equal(value_1, @storage.collection_fetch(odba_id_1, key_1))
+      odba_id_2 = __LINE__
+      value_2 = "dump"
+      key_2 = "key_2_dump"
+      @storage.collection_store(odba_id_2, key_2, value_2)
+      assert_equal(value_1, @storage.collection_fetch(odba_id_1, key_1))
+      res = @storage.restore_collection(odba_id_1)
+      assert_equal([[key_1, value_1]], res)
+      res = @storage.restore_collection(odba_id_2)
+      assert_equal([[key_2, value_2]], res)
+    end
+
     def test_collection_fetch
       @storage.collection_store(34, "key_dump", "dump")
       assert_equal("dump", @storage.collection_fetch(34, "key_dump"))
       @storage.collection_remove(34, "key_dump")
       assert_nil(@storage.collection_fetch(34, "key_dump"))
+    end
+
+    def test_index_matches
+      keys = %w[key1 key2 key3]
+      # index_fetch_keys(index_name, length = nil)
+      create_a_index
+      origin_id = __LINE__
+      target_id = __LINE__
+      keys.each_with_index do |key, index|
+        ODBA.storage.update_index(@test_index, origin_id + index, key, target_id + index)
+      end
+      #     def index_matches(index_name, substring, limit = nil, offset = 0)
+      res = @storage.index_matches(@test_index, "key1")
+      assert_equal(1, res.size)
+      res = @storage.index_matches(@test_index, "key")
+      assert_equal(3, res.size)
+      res = @storage.index_matches(@test_index, "key", 1)
+      assert_equal(1, res.size)
+      assert_equal(keys.first, res.first)
+      res = @storage.index_matches(@test_index, "key", 1, 1)
+      assert_equal(1, res.size)
+      assert_equal(keys[1], res.first)
+      res = @storage.index_matches(@test_index, "key", 2, 1)
+      assert_equal(2, res.size)
+      assert_equal(keys[1], res.first)
+      assert_equal(keys[2], res.last)
     end
 
     def test_index_fetch_keys
@@ -332,7 +417,19 @@ module ODBA
       keys.each_with_index do |key, index|
         ODBA.storage.update_index(@test_index, origin_id + index, key, target_id + index)
       end
+      res = @storage.index_fetch_keys(@test_index)
       assert_equal(keys, @storage.index_fetch_keys(@test_index))
+      assert_equal(keys, res)
+      res = @storage.index_fetch_keys(@test_index, 1)
+      assert_equal(["k"], res)
+      res = @storage.index_fetch_keys(@test_index, 2)
+      assert_equal(["ke"], res)
+      res = @storage.index_fetch_keys(@test_index, 3)
+      assert_equal(["key"], res)
+      res = @storage.index_fetch_keys(@test_index, 4)
+      assert_equal(keys, res)
+      res = @storage.index_fetch_keys(@test_index, 99)
+      assert_equal(keys, res)
     end
 
     def test_index_fetch_keys_short
@@ -421,6 +518,23 @@ module ODBA
       res = @storage.retrieve_from_condition_index(tablename, terms, 1)
       # TODO: Must retrieve at least one valid
       assert_equal(1, res.size)
+
+      terms = [
+        ["cond1", "foo"],
+        ["cond2", nil],
+        ["cond3", {"condition" => "like", "value" => "bar"}],
+        ["cond4", {"condition" => ">", "value" => 5}]
+      ]
+      res = @storage.retrieve_from_condition_index(tablename, terms)
+      assert_equal(5, res.size)
+      terms = [
+        ["cond1", "foo"],
+        ["cond2", nil],
+        ["cond3", {"condition" => "like", "value" => "NotFound"}],
+        ["cond4", {"condition" => ">", "value" => 5}]
+      ]
+      res = @storage.retrieve_from_condition_index(tablename, terms)
+      assert_equal(0, res.size)
     end
 
     def test_setup__object
@@ -467,9 +581,15 @@ module ODBA
     def test_condition_index_delete
       tablename = create_a_condition_index
       # condition_index_delete(index_name, origin_id, search_terms, target_id = nil)
-      add_one_condition_entry
+      add_entry = add_one_condition_entry
       res = @storage.condition_index_delete(tablename, 3, {"foo" => 27, "bar" => 7})
       assert_equal(0, res)
+      assert_raise ODBA::OdbaError do
+        @storage.condition_index_delete(tablename, false, add_entry[2])
+      end
+      assert_raise ODBA::OdbaError do
+        @storage.condition_index_delete(tablename, nil, add_entry[2])
+      end
     end
 
     def test_condition_index_delete__with_target_id
@@ -522,6 +642,13 @@ module ODBA
       assert_equal(5, res.size)
       res = @storage.condition_index_ids(tablename, odba_id + 1, "target_id")
       assert_equal(0, res.size)
+      # def update_condition_index(index_name, origin_id, search_terms, target_id)
+      search_terms = {"foo" => 29, "bar" => "28"}
+      res = @storage.update_condition_index(tablename, 1, search_terms, nil)
+      assert_equal(1, res)
+
+      res = @storage.update_condition_index(tablename, 99, search_terms, nil)
+      assert_equal(0, res)
     end
 
     def test_ensure_target_id_index

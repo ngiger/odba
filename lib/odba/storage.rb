@@ -5,6 +5,7 @@
 
 require "singleton"
 require "dbi"
+require "debug" if defined?(Test::Unit::TestCase)
 
 module ODBA
   class Storage # :nodoc: all
@@ -90,13 +91,11 @@ module ODBA
 
     def condition_index_delete(index_name, origin_id,
       search_terms, target_id = nil)
+      # Niklaus believes in April 2025, that origin_id must always be a valid integer
+      raise OdbaError unless origin_id
       values = []
       sql = "DELETE FROM #{index_name}"
-      sql << if origin_id
-        " WHERE origin_id = ?"
-      else
-        " WHERE origin_id IS ?"
-      end
+      sql << " WHERE origin_id = ?"
       search_terms.each { |key, value|
         sql << " AND %s = ?" % key
         values << value
@@ -463,7 +462,7 @@ module ODBA
 
     def restore(odba_id)
       row = dbi.select_one("SELECT content FROM object WHERE odba_id = ?", odba_id)
-      row.first unless row.nil?
+      row&.first
     end
 
     def retrieve_connected_objects(target_id)
@@ -559,7 +558,7 @@ module ODBA
     def restore_named(name)
       row = dbi.select_one("SELECT content FROM object WHERE name = ?",
         name)
-      row.first unless row.nil?
+      row&.first
     end
 
     def restore_prefetchable
@@ -579,12 +578,8 @@ module ODBA
           $stderr = old_stderr
         end
       }
-      unless dbi.columns("object").any? { |col| col.name == "extent" }
-        dbi.do <<~EOS
-          ALTER TABLE object ADD COLUMN extent TEXT;
-          CREATE INDEX IF NOT EXISTS extent_index ON object(extent);
-        EOS
-      end
+      # Niklaus removed the code to add a column extent to the table object
+      # in April 2025, as he thinks this is something which should never occur
       $stderr = old_stderr
     end
 
