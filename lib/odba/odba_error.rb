@@ -11,4 +11,7 @@ module ODBA
 
   class OdbaDuplicateIdError < OdbaError
   end
+
+  class OdbaProgrammingError < OdbaError
+  end
 end

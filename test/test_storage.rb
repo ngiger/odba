@@ -6,7 +6,7 @@ require "helper"
 require "odba"
 require "odba/storage"
 require "odba/connection_pool"
-require "dbi"
+require "sequel"
 
 
 class User
@@ -25,9 +25,9 @@ end
 module ODBA
   class TestStorage < Test::Unit::TestCase
     def setup
-      setup_pg_test
       @test_index = "test_index"
       @tables_2_delete = ["object", "collection", "object_connection", "fulltext", @test_index]
+      setup_pg_test
     end
 
     def teardown
@@ -48,10 +48,10 @@ module ODBA
 
     def test_delete_persistable
       @storage.store(2, "zwei", "foo", true, nil)
-      res = @dbi.do('select count(*) from "object" where odba_id = 2;')
+      res = @dbi['select count(*) from "object" where odba_id = 2;'].first[:count]
       assert_equal(1, res)
       @storage.delete_persistable(2)
-      res = @dbi.do('select * from "object" where odba_id = 2;')
+      res = @dbi['select count(*) from "object" where odba_id = 2;'].first[:count]
       assert_equal(0, res)
     end
 
@@ -70,18 +70,16 @@ module ODBA
     end
 
     def test_get_server_version
-      assert_equal("17.1", ODBA::Storage.instance.get_server_version)
+      assert_match(/17.+1.*/, ODBA::Storage.instance.get_server_version.to_s)
     end
 
     def create_a_index(index_name = @test_index)
       @tables_2_delete << index_name
-      if @dbi.columns(index_name).size > 0
-        require 'debug'; binding.break
-      end
-      assert_equal([], @dbi.columns(index_name))
+      assert_false(@dbi.table_exists?(index_name))
       @storage.create_index(index_name)
       ["origin_id", "search_term", "target_id"].each do |column_name|
-        assert_not_nil(@dbi.columns(index_name).find { |x| x[:name].eql?(column_name) })
+        schema = @dbi.schema(index_name.to_sym)
+        assert_equal(1, schema.count{|x| x.first.to_s.eql?(column_name)})
       end
     end
 
@@ -94,9 +92,9 @@ module ODBA
       index_name = "indexWithUpcase"
       @tables_2_delete << index_name.downcase
       @storage.create_index(index_name)
-      assert_equal([], @dbi.columns(index_name))
+      assert_false(@dbi.table_exists?(index_name))
       # DBI seems to downcase all table names when searching for columns
-      assert_not_nil(@dbi.columns(index_name.downcase).find { |x| x[:name].eql?("target_id") })
+      assert(@dbi.table_exists?(index_name.downcase))
     end
 
     def test_next_id
@@ -179,6 +177,7 @@ module ODBA
       name = "foo"
       @storage.store(odba_id, dump, name, true, User)
       assert_equal(dump, @storage.restore_named(name))
+      assert_nil(@storage.restore_named("Invalid_Name"))
     end
 
     def test_max_id
@@ -192,7 +191,6 @@ module ODBA
       search_term = "my_search",
       target_id = __LINE__ + 1)
       create_a_index(index_name)
-      # puts "#{index_name}, #{origin_id}, #{search_term}, #{target_id}"
       @storage.update_index(index_name, origin_id, search_term, target_id) if origin_id
       [index_name, origin_id, search_term, target_id]
     end
@@ -244,7 +242,7 @@ module ODBA
       assert_equal(1, res.size)
       # index_delete_origin(index_name, odba_id, term)
       @storage.index_delete_origin(index_name, origin_id, search_term)
-      res = @storage.retrieve_from_index(index_name, "NofFound")
+      res = @storage.retrieve_from_index(index_name, "NotFound")
       assert_equal(0, res.size)
       res = @storage.retrieve_from_index(index_name, search_term)
       assert_equal(0, res.size)
@@ -289,10 +287,10 @@ module ODBA
       search_term = "-cloprostenolum natricum"
       index_name, origin_id, search_term, _ = setup_index_with_one_entry(@test_index, __LINE__, search_term)
       res = @storage.retrieve_from_index(index_name, search_term)
-      assert_equal(1, res.size)
+      assert_equal(1, res.count)
 
       # Just to show that we find it via a normal search
-      res = @storage.dbi.select_all("select * from #{index_name}")
+      res = @storage.dbi["select * from #{index_name}"].collect{|x| x.values}
       assert_equal(1, res.size)
       assert_equal(origin_id, res.first.first)
 
@@ -333,16 +331,16 @@ module ODBA
     def test_create_condition_index
       res = create_a_condition_index
       ["origin_id", "foo", "bar", "target_id"].each do |column_name|
-        assert_not_nil(@dbi.columns(res).find { |x| x[:name].eql?(column_name) })
+        assert_not_nil(@dbi[res.to_sym].columns.find{|x| x.to_s.eql?(column_name)})
       end
     end
 
     def create_a_fulltext_index(tablename = "fulltext")
       @storage.create_fulltext_index(tablename)
-      assert(@dbi.columns(tablename).count > 0)
-      indices = @dbi.columns(tablename).collect { |x| x.name if x.indexed }
-      assert_equal(["origin_id", "search_term", "target_id"], indices)
-      tablename
+      assert(@dbi.table_exists?(tablename))
+      indices =  @dbi.indexes(tablename).values.collect{|x| x[:columns]}
+      assert_equal([:origin_id, :search_term, :target_id], indices.flatten.sort)
+      return tablename
     end
 
     def test_create_fulltext_index
@@ -354,7 +352,7 @@ module ODBA
       expected.each do |id|
         @storage.store(id, "tst" + id.to_s, "foo" + id.to_s, true, Object)
       end
-      assert_equal(expected, @storage.extent_ids(Object))
+      assert_equal(expected, @storage.extent_ids(Object.to_s))
     end
 
     def test_collection_restore
@@ -481,8 +479,9 @@ module ODBA
         [:cond4, "Integer"]
       ]
       tablename = create_a_condition_index("tst_index", definition)
+      assert(@dbi.table_exists?(tablename))
       ["origin_id", "cond1", "cond2", "cond3", "cond4", "target_id"].each do |column_name|
-        assert_not_nil(@dbi.columns(tablename).find { |x| x[:name].eql?(column_name) })
+        assert_not_nil(@dbi[tablename.to_sym].columns.find{|x| x.to_s.eql?(column_name)})
       end
 
       values = [
@@ -540,14 +539,14 @@ module ODBA
     def test_setup__object
       tables = %w[object object_connection collection]
       @storage.setup
-      assert_not_nil(@dbi.columns("object").find { |x| x[:name].eql?("odba_id") })
-      assert_not_nil(@dbi.columns("object").find { |x| x[:name].eql?("name") })
-      assert_not_nil(@dbi.columns("object").find { |x| x[:name].eql?("content") })
-      assert_not_nil(@dbi.columns("object").find { |x| x[:name].eql?("prefetchable") })
-      assert_not_nil(@dbi.columns("object").find { |x| x[:name].eql?("extent") })
       tables.each do |tablename|
-        assert(@dbi.columns(tablename).count > 0)
+        assert(@dbi.table_exists?(tablename))
       end
+      assert(@dbi[:object].columns.find{|x| "odba_id".eql?(x.to_s)})
+      assert(@dbi[:object].columns.find{|x| "name".eql?(x.to_s)})
+      assert(@dbi[:object].columns.find{|x| "content".eql?(x.to_s)})
+      assert(@dbi[:object].columns.find{|x| "prefetchable".eql?(x.to_s)})
+      assert(@dbi[:object].columns.find{|x| "extent".eql?(x.to_s)})
     end
 
     def test_update_condition_index__without_target_id
@@ -769,31 +768,31 @@ module ODBA
     end
 
     def test_condition_index_ids_invalid_index
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.condition_index_ids("invalid_index_name", 5, "origin_id")
       end
     end
 
     def test_index_delete_origin_invalid_index
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.index_delete_origin("invalid_index_name", __LINE__, "search-term")
       end
     end
 
     def test_index_delete_target_invalid_index
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.index_delete_target("invalid_index_name", __LINE__, "search-term", 27)
       end
     end
 
     def test_retrieve_from_index_invalid_name
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.retrieve_from_index("invalid_index_name", "search-term")
       end
     end
 
     def test_index_target_ids_invalid_index
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.index_target_ids("index", "search_term")
       end
     end
@@ -802,55 +801,55 @@ module ODBA
       conds = [
         ["cond1", "foo"]
       ]
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.retrieve_from_condition_index("index", conds, 1)
       end
     end
 
     def test_retrieve_from_invalid_condition_index
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.create_condition_index("InvalidName", [[]])
       end
     end
 
     def test_update_fulltext_index_invalid
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.update_fulltext_index("InvalidTable", 12, "some  text", 15)
       end
     end
 
     def test_condition_index_delete_invalid
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.condition_index_delete("index", 3, {"c1" => "f", "c2" => 7}, 4)
       end
     end
 
     def test_fulltext_index_delete_invalid
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.fulltext_index_delete("IndexInvalidName", 4, "target_id")
       end
     end
 
     def test_update_index_invalid
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.update_index("Invalid_Index_Name", 3, "search_term", 27)
       end
     end
 
     def test_delete_index_element_invalid
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.delete_index_element("Invalid_Index_Name", 23, "origin_id")
       end
     end
 
     def test_generate_dictionary_invalid
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.generate_dictionary("french")
       end
     end
 
     def test_create_dictionary_map_invalid
-      assert_raise DBI::ProgrammingError do
+      assert_raise Sequel::DatabaseError do
         @storage.create_dictionary_map("french")
       end
     end

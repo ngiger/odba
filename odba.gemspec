@@ -19,9 +19,10 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'observer'
   spec.add_dependency 'drb'
   spec.add_dependency 'stringio'
-  spec.add_development_dependency 'ydbi',   '>=0.5.7'
-  spec.add_development_dependency 'ydbd-pg','>=0.5.7'
+  spec.add_dependency "sequel"
+  spec.add_dependency "sequel_pg"
 
+  spec.add_development_dependency "sqlite3" # to run tests with sqlite
   spec.add_development_dependency "bundler"
   spec.add_development_dependency "rake"
   spec.add_development_dependency "rspec"

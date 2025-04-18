@@ -2,6 +2,7 @@
 # TestConnectionPool -- odba -- 03.08.2005 -- hwyss@ywesee.com
 require_relative "helper"
 require "odba/connection_pool"
+require "odba/odba_error"
 ## connection_pool requires 'dbi', which unshifts the site_ruby dir
 #  to the first position in $LOAD_PATH ( == $: ). As a result, files are
 #  loaded from site_ruby if they are installed there, and thus ignored
@@ -12,7 +13,7 @@ module ODBA
   class TestConnectionPool < Test::Unit::TestCase
     include FlexMock::TestCase
     def test_survive_error
-      flexstub(DBI).should_receive(:connect).times(10).and_return {
+      flexstub(Sequel).should_receive(:connect).times(10).and_return {
         conn = FlexMock.new("Connection")
         conn.should_ignore_missing
         conn
@@ -20,7 +21,7 @@ module ODBA
       pool = ConnectionPool.new
       pool.connections.each { |conn|
         conn.should_receive(:execute).and_return {
-          raise DBI::InterfaceError.new
+          raise OdbaError.new
           ## after the first error is raised, ConnectionPool reconnects.
         }
       }
@@ -28,19 +29,19 @@ module ODBA
     end
 
     def test_multiple_errors__give_up
-      flexstub(DBI).should_receive(:connect).times(20).and_return {
+      flexstub(Sequel).should_receive(:connect).times(20).and_return {
         conn = FlexMock.new("Connection")
         conn.should_receive(:execute).and_return {
-          raise DBI::InterfaceError.new
+          raise OdbaError.new
         }
         conn
       }
       pool = ConnectionPool.new
-      assert_raises(DBI::InterfaceError) { pool.execute("statement") }
+      assert_raises(OdbaError) { pool.execute("statement") }
     end
 
     def test_size
-      flexstub(DBI).should_receive(:connect).times(5).and_return {
+      flexstub(Sequel).should_receive(:connect).times(5).and_return {
         conn = FlexMock.new("Connection")
         conn.should_ignore_missing
         conn
@@ -50,7 +51,7 @@ module ODBA
     end
 
     def test_disconnect
-      flexstub(DBI).should_receive(:connect).times(5).and_return {
+      flexstub(Sequel).should_receive(:connect).times(5).and_return {
         conn = FlexMock.new("Connection")
         conn.should_ignore_missing
         conn
@@ -63,10 +64,10 @@ module ODBA
     end
 
     def test_disconnect_error
-      flexstub(DBI).should_receive(:connect).times(5).and_return {
+      flexstub(Sequel).should_receive(:connect).times(5).and_return {
         conn = FlexMock.new("Connection")
         conn.should_receive(:disconnect).times(1).and_return {
-          raise DBI::InterfaceError.new
+          raise OdbaError.new
         }
         conn
       }
