@@ -23,8 +23,14 @@ jobs:
     - name: Build the devenv shell and run any pre-commit hooks
       run: devenv test
 
-    - name: Run the example.rb which uses a real database
+    - name: Run the example.rb which uses the postgres database odba_test
       shell: devenv shell bash -- -e {0}
       run: |
         devenv up --detach
         devenv shell bundle exec ruby test/example.rb
+
+    - name: Run the unit test using the postgres database odba_test
+      shell: devenv shell bash -- -e {0}
+      run: |
+        devenv up --detach
+        devenv shell bundle exec rake test
