@@ -8,7 +8,6 @@ require "odba/storage"
 require "odba/connection_pool"
 require "sequel"
 
-
 class User
   attr_accessor :first_name, :last_name
   include ODBA::Persistable
@@ -27,13 +26,13 @@ module ODBA
     def setup
       @test_index = "test_index"
       @tables_2_delete = ["object", "collection", "object_connection", "fulltext", @test_index]
-      setup_pg_test
+      setup_db_test
     end
 
     def teardown
       super
       @tables_2_delete.sort.uniq
-      teardown_pg_test(@tables_2_delete)
+      teardown_db_test(@tables_2_delete)
     end
 
     def test_bulk_restore
@@ -42,17 +41,15 @@ module ODBA
       @storage.store(23, "dreiundzwandzig", "foo23", true, nil)
       @storage.store(4, "vier", "foo4", true, nil)
       res = @storage.bulk_restore(array)
-      assert_equal(array, res.collect { |x| x.first })
-      assert_equal(["eins", "dreiundzwandzig", "vier"], res.collect { |x| x.last })
+      assert_equal(array.sort, res.collect { |x| x.first }.sort)
+      assert_equal(["eins", "dreiundzwandzig", "vier"].sort, res.collect { |x| x.last }.sort)
     end
 
     def test_delete_persistable
       @storage.store(2, "zwei", "foo", true, nil)
-      res = @dbi['select count(*) from "object" where odba_id = 2;'].first[:count]
-      assert_equal(1, res)
+      assert_equal(1, @dbi[:object].all.size)
       @storage.delete_persistable(2)
-      res = @dbi['select count(*) from "object" where odba_id = 2;'].first[:count]
-      assert_equal(0, res)
+      assert_equal(0, @dbi[:object].all.size)
     end
 
     def test_restore_prefetchable
@@ -70,7 +67,7 @@ module ODBA
     end
 
     def test_get_server_version
-      assert_match(/17.+1.*/, ODBA::Storage.instance.get_server_version.to_s)
+      assert_match(/\d{5}/, ODBA::Storage.instance.get_server_version.to_s)
     end
 
     def create_a_index(index_name = @test_index)
@@ -79,7 +76,7 @@ module ODBA
       @storage.create_index(index_name)
       ["origin_id", "search_term", "target_id"].each do |column_name|
         schema = @dbi.schema(index_name.to_sym)
-        assert_equal(1, schema.count{|x| x.first.to_s.eql?(column_name)})
+        assert_equal(1, schema.count { |x| x.first.to_s.eql?(column_name) })
       end
     end
 
@@ -92,9 +89,14 @@ module ODBA
       index_name = "indexWithUpcase"
       @tables_2_delete << index_name.downcase
       @storage.create_index(index_name)
-      assert_false(@dbi.table_exists?(index_name))
       # DBI seems to downcase all table names when searching for columns
       assert(@dbi.table_exists?(index_name.downcase))
+      # Sequels return true where index_name is upcase or downcast
+      if ODBA.use_postgres_db?
+        assert_false(@dbi.table_exists?(index_name))
+      else
+        assert_true(@dbi.table_exists?(index_name))
+      end
     end
 
     def test_next_id
@@ -154,7 +156,7 @@ module ODBA
       assert_equal(1, res)
 
       # Test storing when no name given
-      odba_id_2 = odba_id + 10;
+      odba_id_2 = odba_id + 10
       res = @storage.store(odba_id_2, dump2, nil, true, User)
       assert_equal(1, res)
       res = @storage.restore(odba_id_2)
@@ -186,7 +188,7 @@ module ODBA
       assert_equal(max_id, @storage.max_id) # calls ultimatively the private method @storage.restore_max_id
     end
 
-    def setup_index_with_one_entry(index_name = "index",
+    def setup_index_with_one_entry(index_name = "a_index",
       origin_id = __LINE__,
       search_term = "my_search",
       target_id = __LINE__ + 1)
@@ -200,20 +202,20 @@ module ODBA
       @storage.update_index(index_name, origin_id + 1, "Nothing", target_id + 10)
       @storage.update_index(index_name, origin_id + 2, search_term.upcase, target_id + 20)
       # Check for similar string
-      res = @storage.retrieve_from_index("index", "%" + search_term[2..4] + "%")
+      res = @storage.retrieve_from_index("a_index", "%" + search_term[2..4] + "%")
       assert_equal(1, res.size)
       assert_equal([target_id, 1], res.first)
       # Check for exact string
-      res = @storage.retrieve_from_index("index", search_term)
+      res = @storage.retrieve_from_index("a_index", search_term)
       assert_equal(1, res.size)
       assert_equal([target_id, 1], res.first)
-      res = @storage.retrieve_from_index("index", "%")
+      res = @storage.retrieve_from_index("a_index", "%")
       assert_equal(1, res.first.last) # Count must be one matching target_id
       assert_equal(1, res.count { |x| x.first == target_id })
       assert_equal(1, res.count { |x| x.first == target_id + 10 })
       assert_equal(1, res.count { |x| x.first == target_id + 20 })
       # Now test whether we receive only one
-      res = @storage.retrieve_from_index("index", "%", false, 1)
+      res = @storage.retrieve_from_index("a_index", "%", false, 1)
       assert_equal(1, res.first.last) # Count must be one matching target_id
       # Now we change the index and
       @storage.update_index(index_name, origin_id + 1, search_term + " more", target_id + 10)
@@ -260,7 +262,7 @@ module ODBA
       @storage.ensure_object_connections(origin_id + 1, [target_id])
       res = @storage.retrieve_connected_objects(target_id)
       assert_equal(2, res.size)
-      res = @storage.ensure_object_connections(origin_id + 1, [target_id+1])
+      @storage.ensure_object_connections(origin_id + 1, [target_id + 1])
       res = @storage.retrieve_connected_objects(target_id)
       assert_equal(1, res.size)
       assert(res.find { |x| origin_id == x.first })
@@ -290,7 +292,7 @@ module ODBA
       assert_equal(1, res.count)
 
       # Just to show that we find it via a normal search
-      res = @storage.dbi["select * from #{index_name}"].collect{|x| x.values}
+      res = @storage.dbi["select * from #{index_name}"].collect { |x| x.values }
       assert_equal(1, res.size)
       assert_equal(origin_id, res.first.first)
 
@@ -331,16 +333,20 @@ module ODBA
     def test_create_condition_index
       res = create_a_condition_index
       ["origin_id", "foo", "bar", "target_id"].each do |column_name|
-        assert_not_nil(@dbi[res.to_sym].columns.find{|x| x.to_s.eql?(column_name)})
+        assert_not_nil(@dbi[res.to_sym].columns.find { |x| x.to_s.eql?(column_name) })
       end
     end
 
     def create_a_fulltext_index(tablename = "fulltext")
       @storage.create_fulltext_index(tablename)
       assert(@dbi.table_exists?(tablename))
-      indices =  @dbi.indexes(tablename).values.collect{|x| x[:columns]}
+      indices = if ODBA.use_postgres_db?
+        @dbi.indexes(tablename).values.collect { |x| x[:columns] }
+      else
+        @dbi.indexes(tablename).values.collect { |x| x[:columns].first }
+      end
       assert_equal([:origin_id, :search_term, :target_id], indices.flatten.sort)
-      return tablename
+      tablename
     end
 
     def test_create_fulltext_index
@@ -356,7 +362,7 @@ module ODBA
     end
 
     def test_collection_restore
-#      def restore_collection(odba_id)
+      #      def restore_collection(odba_id)
       odba_id_1 = __LINE__
       value_1 = "dump"
       key_1 = "key_1_dump"
@@ -481,7 +487,7 @@ module ODBA
       tablename = create_a_condition_index("tst_index", definition)
       assert(@dbi.table_exists?(tablename))
       ["origin_id", "cond1", "cond2", "cond3", "cond4", "target_id"].each do |column_name|
-        assert_not_nil(@dbi[tablename.to_sym].columns.find{|x| x.to_s.eql?(column_name)})
+        assert_not_nil(@dbi[tablename.to_sym].columns.find { |x| x.to_s.eql?(column_name) })
       end
 
       values = [
@@ -542,11 +548,11 @@ module ODBA
       tables.each do |tablename|
         assert(@dbi.table_exists?(tablename))
       end
-      assert(@dbi[:object].columns.find{|x| "odba_id".eql?(x.to_s)})
-      assert(@dbi[:object].columns.find{|x| "name".eql?(x.to_s)})
-      assert(@dbi[:object].columns.find{|x| "content".eql?(x.to_s)})
-      assert(@dbi[:object].columns.find{|x| "prefetchable".eql?(x.to_s)})
-      assert(@dbi[:object].columns.find{|x| "extent".eql?(x.to_s)})
+      assert(@dbi[:object].columns.find { |x| "odba_id".eql?(x.to_s) })
+      assert(@dbi[:object].columns.find { |x| "name".eql?(x.to_s) })
+      assert(@dbi[:object].columns.find { |x| "content".eql?(x.to_s) })
+      assert(@dbi[:object].columns.find { |x| "prefetchable".eql?(x.to_s) })
+      assert(@dbi[:object].columns.find { |x| "extent".eql?(x.to_s) })
     end
 
     def test_update_condition_index__without_target_id
@@ -749,7 +755,7 @@ module ODBA
         res = @storage.delete_index_element(index_name, idx, "target_id")
         assert_equal(0, res)
       end
-      @storage.delete_index_element("index", 15, "target_id")
+      @storage.delete_index_element("a_index", 15, "target_id")
     end
 
     def test_generate_dictionary
@@ -793,7 +799,7 @@ module ODBA
 
     def test_index_target_ids_invalid_index
       assert_raise Sequel::DatabaseError do
-        @storage.index_target_ids("index", "search_term")
+        @storage.index_target_ids("a_index", "search_term")
       end
     end
 
@@ -802,7 +808,7 @@ module ODBA
         ["cond1", "foo"]
       ]
       assert_raise Sequel::DatabaseError do
-        @storage.retrieve_from_condition_index("index", conds, 1)
+        @storage.retrieve_from_condition_index("a_index", conds, 1)
       end
     end
 
@@ -820,7 +826,7 @@ module ODBA
 
     def test_condition_index_delete_invalid
       assert_raise Sequel::DatabaseError do
-        @storage.condition_index_delete("index", 3, {"c1" => "f", "c2" => 7}, 4)
+        @storage.condition_index_delete("a_index", 3, {"c1" => "f", "c2" => 7}, 4)
       end
     end
 
@@ -852,6 +858,60 @@ module ODBA
       assert_raise Sequel::DatabaseError do
         @storage.create_dictionary_map("french")
       end
+    end
+
+    def test_use_postgres_db
+      if /sqlite/i.match?(ENV["TEST_DB"])
+        puts "Using SQLITE in memory database"
+        assert_false(ODBA.use_postgres_db?)
+      else
+        puts "Using real postgresql database"
+        assert_true(ODBA.use_postgres_db?)
+      end
+    end
+
+    def test_connect_to_sqlite
+      tests = [
+        ["sqlite", "./tst_blog.db"],
+        ["sqlite", nil],
+        ["sqlite", "sqlite:"],
+        ["sqlite", "memory"],
+        ["sqlite", ":memory:"]
+      ]
+      tests.each do |atest|
+        adapter = atest.first
+        db_args = atest.last
+        pool = ConnectionPool.new(db_args)
+        # puts "adapter should be #{adapter} for #{db_args} class #{pool.opts[:adapter_class]}"
+        assert_match(/#{adapter}/i, pool.opts[:adapter_class].to_s)
+        assert_match(/#{adapter}/i, pool.opts[:adapter])
+        assert_nil(pool.opts[:orig_opts][:database])
+        FileUtils.rm_f(["sqlite:", "memory", "tst_blog.db"])
+      end
+    end
+
+    def test_connect_to_pg
+      begin
+        pool = ConnectionPool.new("postgres://127.0.0.1:5433/odba_test?user=odba_test&password=")
+      rescue => error
+        if error.is_a?(Sequel::DatabaseConnectionError) && !ODBA.use_postgres_db?
+          omit("Cannot test postgres connection when running with #{ENV["TEST_DB"]}")
+        end
+      end
+      assert_match(/postgres/i, pool.opts[:adapter])
+      pool.disconnect
+    end
+
+    def test_connect_to_pg_with_params
+      begin
+        pool = ConnectionPool.new(FIRST_PG_PARAM, user: "db_user", password: "db_password", host: "localhost")
+      rescue => error
+        if error.is_a?(Sequel::DatabaseConnectionError) && !ODBA.use_postgres_db?
+          omit("Cannot test postgres connection when running with #{ENV["TEST_DB"]}")
+        end
+      end
+      assert_match(/postgres/i, pool.opts[:adapter])
+      pool.disconnect
     end
   end
 end

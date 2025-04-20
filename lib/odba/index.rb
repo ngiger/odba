@@ -13,7 +13,7 @@ module ODBA
   # Further, _search_term_ must be resolved in relation to _origin_.
   class IndexCommon # :nodoc: all
     include Persistable
-    ODBA_EXCLUDE_VARS
+    ODBA_EXCLUDE_VARS = # standard:disable  Lint/Void
       [
         :@proc_origin, :@proc_target, :@proc_resolve_search_term
       ]

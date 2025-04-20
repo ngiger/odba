@@ -12,16 +12,17 @@ require "odba/odba_error"
 module ODBA
   class TestConnectionPool < Test::Unit::TestCase
     include FlexMock::TestCase
+
     def test_survive_error
-      flexstub(Sequel).should_receive(:connect).times(10).and_return {
+      flexstub(Sequel).should_receive(:connect).with(FIRST_PG_PARAM).times(10).and_return {
         conn = FlexMock.new("Connection")
         conn.should_ignore_missing
         conn
       }
-      pool = ConnectionPool.new
+      pool = ConnectionPool.new(FIRST_PG_PARAM)
       pool.connections.each { |conn|
         conn.should_receive(:execute).and_return {
-          raise OdbaError.new
+          raise Sequel::Error
           ## after the first error is raised, ConnectionPool reconnects.
         }
       }
@@ -29,15 +30,15 @@ module ODBA
     end
 
     def test_multiple_errors__give_up
-      flexstub(Sequel).should_receive(:connect).times(20).and_return {
+      flexstub(Sequel).should_receive(:connect).times(5 * 4).and_return {
         conn = FlexMock.new("Connection")
         conn.should_receive(:execute).and_return {
-          raise OdbaError.new
+          raise raise Sequel::Error
         }
         conn
       }
-      pool = ConnectionPool.new
-      assert_raises(OdbaError) { pool.execute("statement") }
+      pool = ConnectionPool.new(FIRST_PG_PARAM)
+      assert_raises(Sequel::Error) { pool.execute("statement") }
     end
 
     def test_size
@@ -46,17 +47,17 @@ module ODBA
         conn.should_ignore_missing
         conn
       }
-      pool = ConnectionPool.new
+      pool = ConnectionPool.new(FIRST_PG_PARAM)
       assert_equal(5, pool.size)
     end
 
     def test_disconnect
-      flexstub(Sequel).should_receive(:connect).times(5).and_return {
+      flexstub(Sequel).should_receive(:connect).with(FIRST_PG_PARAM).times(5).and_return {
         conn = FlexMock.new("Connection")
         conn.should_ignore_missing
         conn
       }
-      pool = ConnectionPool.new
+      pool = ConnectionPool.new(FIRST_PG_PARAM)
       pool.connections.each { |conn|
         conn.should_receive(:disconnect).and_return { assert(true) }
       }
@@ -71,7 +72,7 @@ module ODBA
         }
         conn
       }
-      pool = ConnectionPool.new
+      pool = ConnectionPool.new(FIRST_PG_PARAM)
       pool.disconnect
     end
   end

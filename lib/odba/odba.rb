@@ -50,4 +50,12 @@ module ODBA
   def self.transaction(&block)
     ODBA.cache.transaction(&block)
   end
+
+  def self.use_postgres_db?
+    if ENV["TEST_DB"]
+      !/sqlite/i.match(ENV["TEST_DB"])
+    else
+      true
+    end
+  end
 end

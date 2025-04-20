@@ -3,11 +3,10 @@
 # ODBA::ConnectionPool -- odba -- 08.12.2011 -- mhatakeyama@ywesee.com
 # ODBA::ConnectionPool -- odba -- 08.03.2005 -- hwyss@ywesee.com
 
-require "sequel"
+require "odba/odba"
 
 module ODBA
   class ConnectionPool
-    POOL_SIZE = 5
     SETUP_RETRIES = 3
     # attr_reader :connections
     attr_reader :connections, :dbi_args
@@ -18,7 +17,12 @@ module ODBA
       @opts = @dbi_args.last.is_a?(Hash) ? @dbi_args.pop : {}
       @connections = []
       @mutex = Mutex.new
+      @@poolsize = /^postgres/.match?(@dbi_args.first) ? 5 : 1
       connect
+    end
+
+    def self.pool_size
+      @@poolsize = /sqlite/i.match?(ENV["TEST_DB"]) ? 1 : 5
     end
 
     def next_connection # :nodoc:
@@ -39,7 +43,7 @@ module ODBA
         next_connection { |conn|
           conn.send(method, *args, &block)
         }
-      rescue NoMethodError, ArgumentError, ODBA::OdbaError, Sequel::Error  => e
+      rescue NoMethodError, Sequel::Error => e
         warn e
         if tries > 0 && (!e.is_a?(Sequel::DatabaseConnectionError) \
             || e.message == "no connection to the server")
@@ -62,8 +66,12 @@ module ODBA
     end
 
     def _connect # :nodoc:
-      POOL_SIZE.times {
-        conn = Sequel.connect(*@dbi_args)
+      @@poolsize.times {
+        conn = if /^postgres/.match?(@dbi_args.first)
+          Sequel.connect(*@dbi_args)
+        else
+          Sequel.sqlite
+        end
         if encoding = @opts[:client_encoding]
           conn.execute "SET CLIENT_ENCODING TO '#{encoding}'"
         end

@@ -44,4 +44,3 @@ painter.odba_store
 scientist = User.new("Albert", "Einstein")
 scientist.odba_store
 Example.show_last_added_user
-

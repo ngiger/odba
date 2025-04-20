@@ -4,6 +4,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'odba/version'
 require "bundler/gem_tasks"
 require 'rake/testtask'
+require "standard/rake"
 
 task default: "test"
 Rake::TestTask.new(:test) do |task|
