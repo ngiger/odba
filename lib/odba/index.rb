@@ -101,7 +101,7 @@ module ODBA
 							res
 						}
           EOS
-          @proc_origin = eval(src)
+          @proc_origin = eval(src) # standard:disable Security/Eval
         end
       end
       @proc_origin
@@ -122,7 +122,7 @@ module ODBA
               res
             }
           EOS
-          @proc_target = eval(src)
+          @proc_target = eval(src) # standard:disable Security/Eval
         end
       end
       @proc_target
@@ -144,7 +144,7 @@ module ODBA
 							end
 						}
           EOS
-          @proc_resolve_search_term = eval(src)
+          @proc_resolve_search_term = eval(src) # standard:disable Security/Eval
         end
       end
       @proc_resolve_search_term
@@ -380,7 +380,7 @@ module ODBA
 						values
 					}
         EOS
-        @proc_resolve_search_term = eval(src)
+        @proc_resolve_search_term = eval(src) # standard:disable Security/Eval
       end
       @proc_resolve_search_term
     end

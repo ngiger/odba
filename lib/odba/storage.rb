@@ -71,7 +71,7 @@ module ODBA
       sql = %(SELECT value FROM collection WHERE odba_id = ? AND key = ?)
       res = dbi[sql, odba_id, key_dump]
       rows = res.collect { |x| [x[:value]] }
-      rows.first&.first unless rows.nil?
+      rows.first&.first
     end
 
     def collection_remove(odba_id, key_dump)

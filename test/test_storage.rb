@@ -25,14 +25,12 @@ module ODBA
   class TestStorage < Test::Unit::TestCase
     def setup
       @test_index = "test_index"
-      @tables_2_delete = ["object", "collection", "object_connection", "fulltext", @test_index]
       setup_db_test
     end
 
     def teardown
       super
-      @tables_2_delete.sort.uniq
-      teardown_db_test(@tables_2_delete)
+      teardown_db_test
     end
 
     def test_bulk_restore
@@ -71,7 +69,6 @@ module ODBA
     end
 
     def create_a_index(index_name = @test_index)
-      @tables_2_delete << index_name
       assert_false(@dbi.table_exists?(index_name))
       @storage.create_index(index_name)
       ["origin_id", "search_term", "target_id"].each do |column_name|
@@ -87,7 +84,6 @@ module ODBA
 
     def test_create_index_with_upcase
       index_name = "indexWithUpcase"
-      @tables_2_delete << index_name.downcase
       @storage.create_index(index_name)
       # DBI seems to downcase all table names when searching for columns
       assert(@dbi.table_exists?(index_name.downcase))
@@ -461,7 +457,6 @@ module ODBA
       [:foo, "Integer"],
       [:bar, "varchar"]
     ])
-      @tables_2_delete << tablename
       @storage.create_condition_index(tablename, definition)
       tablename
     end
@@ -903,6 +898,18 @@ module ODBA
     end
 
     def test_connect_to_pg_with_params
+      begin
+        pool = ConnectionPool.new(FIRST_PG_PARAM, user: "db_user", password: "db_password", host: "localhost")
+      rescue => error
+        if error.is_a?(Sequel::DatabaseConnectionError) && !ODBA.use_postgres_db?
+          omit("Cannot test postgres connection when running with #{ENV["TEST_DB"]}")
+        end
+      end
+      assert_match(/postgres/i, pool.opts[:adapter])
+      pool.disconnect
+    end
+
+    def test_connect_to_pg_with_3_params
       begin
         pool = ConnectionPool.new(FIRST_PG_PARAM, user: "db_user", password: "db_password", host: "localhost")
       rescue => error

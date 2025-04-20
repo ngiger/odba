@@ -104,17 +104,17 @@ module ODBA
     override_methods = Object.public_methods - no_override
     override_methods.each { |method|
       src = (method[-1] == "=") ? <<-EOW : <<-EOS
-				def #{method}(args)
-					odba_instance.#{method}(args)
-				end
+      def #{method}(args)
+          odba_instance.#{method}(args)
+      end
       EOW
-				def #{method}(*args)
-					odba_instance.#{method}(*args)
-				end
+      def #{method}(*args)
+          odba_instance.#{method}(*args)
+      end
       EOS
-      eval src
+      eval(src, binding, __FILE__, __LINE__) # standard:disable Security/Eval
     }
-    def method_missing(meth_symbol, *args, &block)
+    def method_missing(meth_symbol, *args, &block) # standard:disable Style/MissingRespondToMissing
       if NO_OVERRIDE.include?(meth_symbol)
         super
       else
@@ -178,12 +178,13 @@ class Array # :nodoc: all
   more_methods = ["replace", "include?"]
   more_methods << "concat" unless defined?(SimpleCov)
   more_methods.each do |method|
-    eval %(
+    src = %(
       alias :_odba_#{method} :#{method}
       def #{method}(stub)
           self._odba_#{method}(stub.odba_instance)
       end
     )
+    eval(src, binding, __FILE__, __LINE__) # standard:disable Security/Eval
   end
 end
 
@@ -193,11 +194,12 @@ class Hash # :nodoc: all
     _odba_equal?(other.odba_instance)
   end
   ["merge", "merge!", "replace"].each { |method|
-    eval %(
+    src = %(
       alias :_odba_#{method} :#{method}
       def #{method}(stub)
           self._odba_#{method}(stub.odba_instance)
       end
     )
+    eval(src, binding, __FILE__, __LINE__) # standard:disable Security/Eval
   }
 end

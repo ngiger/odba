@@ -387,7 +387,7 @@ module ODBA
 
     def invalidate!(*odba_ids)
       odba_ids.each do |odba_id|
-        if entry = fetch_cache_entry(odba_id)
+        if (entry = fetch_cache_entry(odba_id))
           entry.odba_retire force: true
         end
         invalidate odba_id
@@ -399,7 +399,7 @@ module ODBA
     COUNT_FILE = "/tmp/count"
     def lock(dbname)
       lock_file = LOCK_FILE + "." + dbname
-      open(lock_file, "a") do |st|
+      File.open(lock_file, "a") do |st|
         st.flock(File::LOCK_EX)
         yield
         st.flock(File::LOCK_UN)
@@ -411,13 +411,13 @@ module ODBA
       count = nil
       lock(dbname) do
         unless File.exist?(count_file)
-          open(count_file, "w") do |out|
+          File.open(count_file, "w") do |out|
             out.print odba_storage.max_id
           end
         end
         count = File.read(count_file).to_i
         count += 1
-        open(count_file, "w") do |out|
+        File.open(count_file, "w") do |out|
           out.print count
         end
         odba_storage.update_max_id(count)
@@ -525,7 +525,7 @@ module ODBA
       @cleaner = Thread.new {
         Thread.current.priority = self.class::CLEANER_PRIORITY
         loop {
-          sleep(self.class::CLEANING_INTERVAL)
+          sleep(self.class::CLEANING_INTERVAL / ( (defined?(Test::Unit::TestCase) ? 10 : 1 )))
           begin
             clean
           rescue => e
@@ -564,7 +564,7 @@ module ODBA
 
     def store_cache_entry(odba_id, object, name = nil) # :nodoc:
       @cache_mutex.synchronize {
-        if cache_entry = fetch_cache_entry(odba_id)
+        if (cache_entry = fetch_cache_entry(odba_id))
           cache_entry.update object
         else
           hash = object.odba_prefetch? ? @prefetched : @fetched
@@ -605,7 +605,7 @@ module ODBA
     def transaction(&block)
       Thread.current[:txids] = []
       ODBA.storage.transaction(&block)
-    rescue Exception => excp
+    rescue => excp
       transaction_rollback
       raise excp
     ensure

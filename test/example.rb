@@ -21,17 +21,16 @@ class Example
   def self.db_setup
     # connect default storage manager to a relational database  on
     # our localhost using port 5435 with a user odba_test and an empty password
-    ODBA.storage.dbi = ODBA::ConnectionPool.new("DBI:Pg:dbname=odba_test;host=127.0.0.1;port=5433", "odba_test", "")
+    ODBA.storage.dbi = ODBA::ConnectionPool.new("postgres://127.0.0.1:5433/odba_test?user=odba_test&password=")
     ODBA.cache.setup
   end
 
   def self.show_last_added_user
-    res = ODBA.storage.dbi.select_all("Select count(*) from object;").first.first
-    odba_id = ODBA.storage.dbi.select_one("select odba_id from object order by odba_id desc limit 1;")
-    puts "show_last_added_user: We have  #{res} objects. Highest odba_id is #{odba_id}"
-    first = ODBA.storage.dbi.select_one("select odba_id, name, prefetchable, extent, content from object order by odba_id desc limit 1;")
-    puts "  DB-content is #{first}"
-    puts "  Fetched object for odba_id #{odba_id} is #{ODBA.cache.fetch(odba_id.first)}"
+    objects = ODBA.storage.dbi[:object]
+    objects.first
+    odba_id = objects.order_by(:odba_id).last[:odba_id]
+    puts "  DB-content is #{objects.order_by(:odba_id).last}"
+    puts "  Fetched object for odba_id #{odba_id} is #{ODBA.cache.fetch(odba_id)}"
   end
 end
 

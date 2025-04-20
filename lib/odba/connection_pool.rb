@@ -47,7 +47,7 @@ module ODBA
         warn e
         if tries > 0 && (!e.is_a?(Sequel::DatabaseConnectionError) \
             || e.message == "no connection to the server")
-          sleep(SETUP_RETRIES - tries)
+          sleep( (SETUP_RETRIES - tries) / (defined?(Test::Unit::TestCase) ? 10 : 1 ))
           tries -= 1
           reconnect
           retry
@@ -55,6 +55,11 @@ module ODBA
           raise
         end
       end
+    end
+
+    def respond_to_missing?(method_name, include_private = false)
+      # method_name.to_s.start_with?('user_') ||
+      super
     end
 
     def size
@@ -72,7 +77,7 @@ module ODBA
         else
           Sequel.sqlite
         end
-        if encoding = @opts[:client_encoding]
+        if (encoding = @opts[:client_encoding])
           conn.execute "SET CLIENT_ENCODING TO '#{encoding}'"
         end
         @connections.push(conn)
@@ -87,9 +92,9 @@ module ODBA
       while (conn = @connections.shift)
         begin
           conn.disconnect
-        rescue Sequel::DatabaseError, Exception
+        rescue Sequel::DatabaseError, StandardError
           ## we're not interested, since we are disconnecting anyway
-          nil
+          nil # standard:disable Lint/ShadowedException
         end
       end
     end

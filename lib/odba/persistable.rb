@@ -232,7 +232,7 @@ module ODBA
     # Delete _observer_ as an observer on this object.
     # It will no longer receive notifications.
     def odba_delete_observer(observer)
-      @odba_observers.delete(observer) if @odba_observers
+      @odba_observers&.delete(observer)
     end
 
     # Delete all observers associated with this object.

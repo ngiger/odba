@@ -95,7 +95,7 @@ module ODBA
       @cache.should_receive(:fetch).with(FlexMock.any, FlexMock.any).and_return([])
       assert_equal([], stub)
       stub = Stub.new(9, [], [])
-      assert([] == stub)
+      assert_equal([], stub)
       [
         "&", "+", "-", "<=>", "==",
         "concat", "equal?", "replace", "|"
@@ -110,7 +110,7 @@ module ODBA
       @cache.should_receive(:fetch).with(FlexMock.any, FlexMock.any).times(5).and_return({})
       assert_equal({}, stub)
       stub = Stub.new(9, [], {})
-      assert({} == stub)
+      assert_equal({}, stub)
       [
         "merge", "merge!", "replace"
       ].each { |method|

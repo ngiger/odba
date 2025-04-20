@@ -21,12 +21,11 @@ FIRST_PG_PARAM = "postgres://127.0.0.1:5433/odba_test"
 def setup_db_test
   @storage = ODBA.storage
   @dbi = ODBA::ConnectionPool.new(get_test_db_params)
-
   ODBA.storage.dbi = @dbi
   ODBA.storage.setup
 end
 
-def teardown_db_test(tables = ["object", "collection", "object_connection"])
+def teardown_db_test
   tables = @dbi.tables.find_all { |x| !/pg_/.match(x) }
   tables.each do |tablename|
     @dbi.run("drop table if exists #{tablename};")

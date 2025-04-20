@@ -92,7 +92,7 @@ module ODBA
       if opts[:force]
         @cache_entry_mutex.synchronize do
           @accessed_by.each do |object_id, odba_id|
-            if item = odba_id2ref(odba_id)
+            if (item = odba_id2ref(odba_id))
               item.odba_stubize instance, opts
             elsif (item = object_id2ref(object_id, odba_id))
               if item.is_a?(Persistable) && !item.is_a?(Stub)

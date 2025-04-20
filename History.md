@@ -1,5 +1,19 @@
 ## not yet released
 
+### User visible changes for upgrade from 1.1.8 to 1.1.9
+
+ConnectionPool.new(dbname, user, auth, attr) is no longer supported, 
+Replace calls to `ConnectionPool` like this
+* old:  `ODBA::ConnectionPool.new('DBI:Pg:dbname=ch_oddb;host=127.0.0.1;port=5432', 'postgres', '')`
+* new   `ODBA::ConnectionPool.new(postgres://127.0.0.1:5433/odba_test, user: "postgres", password: "")`
+
+### Other changes in 1.1.9
+1
+* Sequel does not support the methods select_all/select_one
+* Added gem standard to enforce formatting and preparing for ruby 3.5
+* Added possibility to run test using a sqlite in memory db via 'TEST_DB=sqlite3 bundle exec rake test
+'
+* Replaced ydbi gem by sequel
 * Removed obsolete install.rb. Updated History.txt and moved it to History.md
 * Used standarb for all files
 * Removed obsolete (and not needed) WITH_OIDS to allow running with postgres 12 and later

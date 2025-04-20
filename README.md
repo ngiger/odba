@@ -26,11 +26,10 @@ To see a graphical overview of the Library please see
 
 ## FEATURES/PROBLEMS:
 
+* flexmock gem should be upgraded to 3.x
 * There may still be an sql bottleneck. Has to be investigated further.
 * You will need postgresql installed.
 * The unit test test_clean__prefetched in test/test_cache.rb fails with Ruby 3.3/3.4 sometimes but not always
-* Rework the unit tests to use a test database and less flexmock
-* Rebase the library on the Sequel gem instead of ydbi/ydbd_pg
 * The methods generate_dictionary/create_dictionary_map and do not work using only ODBA
 
 ## Example

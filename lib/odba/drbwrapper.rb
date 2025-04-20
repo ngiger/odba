@@ -41,6 +41,11 @@ module ODBA
       end
     end
 
+    def respond_to_missing?(method_name, include_private = false)
+      # method_name.to_s.start_with?('user_') ||
+      super
+    end
+
     def __wrap(obj)
       if obj.is_a?(ODBA::Persistable)
         DRbWrapper.new(obj.odba_instance)
