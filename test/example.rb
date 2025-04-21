@@ -29,6 +29,7 @@ class Example
     objects = ODBA.storage.dbi[:object]
     objects.first
     odba_id = objects.order_by(:odba_id).last[:odba_id]
+    puts "show_last_added_user: We have  #{objects.count} objects. Highest odba_id is #{odba_id}"
     puts "  DB-content is #{objects.order_by(:odba_id).last}"
     puts "  Fetched object for odba_id #{odba_id} is #{ODBA.cache.fetch(odba_id)}"
   end

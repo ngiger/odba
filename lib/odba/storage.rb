@@ -12,39 +12,7 @@ module ODBA
     include Singleton
     attr_writer :dbi
     BULK_FETCH_STEP = 2500
-    TABLES = [
-      # in table 'object', the isolated dumps of all objects are stored
-      ["object", <<~SQL],
-        CREATE TABLE IF NOT EXISTS object (
-          odba_id INTEGER NOT NULL, content TEXT,
-          name TEXT, prefetchable BOOLEAN, extent TEXT,
-          PRIMARY KEY(odba_id), UNIQUE(name)
-        );
-      SQL
-      ["prefetchable_index", <<~SQL],
-        CREATE INDEX IF NOT EXISTS prefetchable_index ON object(prefetchable);
-      SQL
-      ["extent_index", <<~SQL],
-        CREATE INDEX IF NOT EXISTS extent_index ON object(extent);
-      SQL
-      # helper table 'object_connection'
-      ["object_connection", <<~SQL],
-        CREATE TABLE IF NOT EXISTS object_connection (
-          origin_id integer, target_id integer,
-          PRIMARY KEY(origin_id, target_id)
-        );
-      SQL
-      ["target_id_index", <<~SQL],
-        CREATE INDEX IF NOT EXISTS target_id_index ON object_connection(target_id);
-      SQL
-      # helper table 'collection'
-      ["collection", <<~SQL]
-        CREATE TABLE IF NOT EXISTS collection (
-          odba_id integer NOT NULL, key text, value text,
-          PRIMARY KEY(odba_id, key)
-        );
-      SQL
-    ]
+
     def initialize
       @id_mutex = Mutex.new
     end
@@ -488,26 +456,33 @@ ORDER BY relevance DESC)
     end
 
     def setup
-      TABLES.each do |name, definition|
-        if /extent_index|prefetchable_index|target_id_index/.match?(name)
-          next unless ODBA.use_postgres_db?
-        end
-        begin
-          dbi.run(definition)
-        rescue => err
-          puts "Error creating table #{err}"
-        end
+      dbi.create_table?(:object) do
+        primary_key :odba_id
+        text :name #, unique: true
+        TrueClass :prefetchable, index: true
+        text :content
+        # Do not create a index on name, as only very few items are not null
+        # And declaring it unique leads to problem as sequel does not offer
+        # the possibilty to mark not null as postgresql
+        text :extent, index: true
       end
-      if ODBA.use_postgres_db?
-        dbi[:object].columns.find { |col| col.name.match?(/extent/) }
-      else
-        @dbi.indexes(:object).values.collect { |x| x[:columns].first }
+
+      dbi.create_table?(:object_connection) do
+        Integer :origin_id
+        Integer :target_id, index: true # , name: :target_id_index
+        primary_key [:origin_id, :target_id]
+      end
+
+      dbi.create_table?(:collection) do
+        Integer :odba_id
+        text :key
+        text :value
+        primary_key [:odba_id, :key]
       end
       unless dbi[:object].columns.find { |col| col.name.match?(/extent/) }
-        sql = "ALTER TABLE object ADD COLUMN extent TEXT"
-        dbi.run sql
-        sql = "CREATE INDEX IF NOT EXISTS extent_index ON object(extent);"
-        dbi.run sql
+        dbi.alter_table(:object) do
+          add_column :extent2, String, text: true, index: true
+        end
       end
     end
 

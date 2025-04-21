@@ -36,6 +36,7 @@ To see a graphical overview of the Library please see
 
 You may find this code and some tests which is using this (example)[https://github.com/zdavatz/odba/blob/master/test/example.rb]
     
+    require "odba"
     require "odba/connection_pool"
 
     class User
@@ -55,17 +56,17 @@ You may find this code and some tests which is using this (example)[https://gith
       def self.db_setup
         # connect default storage manager to a relational database  on
         # our localhost using port 5435 with a user odba_test and an empty password
-        ODBA.storage.dbi = ODBA::ConnectionPool.new("DBI:Pg:dbname=odba_test;host=127.0.0.1;port=5433", "odba_test", "")
+        ODBA.storage.dbi = ODBA::ConnectionPool.new("postgres://127.0.0.1:5433/odba_test?user=odba_test&password=")
         ODBA.cache.setup
       end
 
       def self.show_last_added_user
-        res = ODBA.storage.dbi.select_all("Select count(*) from object;").first.first
-        odba_id = ODBA.storage.dbi.select_one("select odba_id from object order by odba_id desc limit 1;")
-        puts "show_last_added_user: We have  #{res} objects. Highest odba_id is #{odba_id}"
-        first = ODBA.storage.dbi.select_one("select odba_id, name, prefetchable, extent, content from object order by odba_id desc limit 1;")
-        puts "  DB-content is #{first}"
-        puts "  Fetched object for odba_id #{odba_id} is #{ODBA.cache.fetch(odba_id.first)}"
+        objects = ODBA.storage.dbi[:object]
+        objects.first
+        odba_id = objects.order_by(:odba_id).last[:odba_id]
+        puts "show_last_added_user: We have  #{objects.count} objects. Highest odba_id is #{odba_id}"
+        puts "  DB-content is #{objects.order_by(:odba_id).last}"
+        puts "  Fetched object for odba_id #{odba_id} is #{ODBA.cache.fetch(odba_id)}"
       end
     end
 
@@ -79,14 +80,15 @@ You may find this code and some tests which is using this (example)[https://gith
     scientist.odba_store
     Example.show_last_added_user
 
+
 You will see something like
 
-    show_last_added_user: We have  2 objects. Highest odba_id is [2]
-      DB-content is [2, nil, false, "User", "04086f3a09557365720b3a104066697273745f6e616d6549220b4c7564776967063a0645543a0f406c6173745f6e616d6549221256616e2042656574686f76656e063b07543a15406f6462615f70657273697374656e74543a0d406f6462615f696469073a14406f6462615f6f6273657276657273303a13406f6462615f707265666574636830"]
-      Fetched object for odba_id [2] is Ludwig Van Beethoven
-    show_last_added_user: We have  4 objects. Highest odba_id is [4]
-      DB-content is [4, nil, false, "User", "04086f3a09557365720b3a104066697273745f6e616d6549220b416c62657274063a0645543a0f406c6173745f6e616d6549220d45696e737465696e063b07543a15406f6462615f70657273697374656e74543a0d406f6462615f696469093a14406f6462615f6f6273657276657273303a13406f6462615f707265666574636830"]
-      Fetched object for odba_id [4] is Albert Einstein
+    show_last_added_user: We have  2 objects. Highest odba_id is 2
+      DB-content is {:odba_id=>2, :name=>"", :prefetchable=>false, :content=>"04086f3a09557365720b3a104066697273745f6e616d6549220b4c7564776967063a0645543a0f406c6173745f6e616d6549221256616e2042656574686f76656e063b07543a15406f6462615f70657273697374656e74543a0d406f6462615f696469073a14406f6462615f6f6273657276657273303a13406f6462615f707265666574636830", :extent=>"User"}
+      Fetched object for odba_id 2 is Ludwig Van Beethoven
+    show_last_added_user: We have  4 objects. Highest odba_id is 4
+      DB-content is {:odba_id=>4, :name=>"", :prefetchable=>false, :content=>"04086f3a09557365720b3a104066697273745f6e616d6549220b416c62657274063a0645543a0f406c6173745f6e616d6549220d45696e737465696e063b07543a15406f6462615f70657273697374656e74543a0d406f6462615f696469093a14406f6462615f6f6273657276657273303a13406f6462615f707265666574636830", :extent=>"User"}
+      Fetched object for odba_id 4 is Albert Einstein
       
 
 This example is run on each push to github via the (github action)[https://github.com/zdavatz/odba/blob/master/.github/workflows/devenv.yml]. It is based on (devenv.sh)[https://devenv.sh/], which ensures reproducability.

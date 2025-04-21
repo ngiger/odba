@@ -20,8 +20,9 @@ Gem::Specification.new do |spec|
   spec.add_dependency "stringio"
   spec.add_dependency "sequel"
   spec.add_dependency "sequel_pg"
+  spec.add_dependency "sqlite3" # to run tests with sqlite
 
-  spec.add_development_dependency "sqlite3" # to run tests with sqlite
+  spec.add_development_dependency "tracer"
   spec.add_development_dependency "bundler"
   spec.add_development_dependency "standard"
   spec.add_development_dependency "rake"

@@ -5,18 +5,19 @@ $: << File.expand_path("../lib/", File.dirname(__FILE__))
 require "test/unit"
 require "flexmock/test_unit"
 require "odba/storage"
+require "odba/connection_pool"
 require "debug"
+
+FIRST_PG_PARAM = "postgres://127.0.0.1:5433/odba_test"
 
 def get_test_db_params
   # see https://sequel.jeremyevans.net/rdoc/files/doc/opening_databases_rdoc.html#label-sqlite
   if /sqlite/i.match?(ENV["TEST_DB"])
     nil
   else
-    "postgres://127.0.0.1:5433/odba_test?user=odba_test&password="
+    FIRST_PG_PARAM + "?user=odba_test&password="
   end
 end
-
-FIRST_PG_PARAM = "postgres://127.0.0.1:5433/odba_test"
 
 def setup_db_test
   @storage = ODBA.storage
