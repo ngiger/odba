@@ -56,6 +56,12 @@ module ODBA
     end
 
     def bulk_restore(rows, odba_caller = nil) # :nodoc:
+      if ::Kernel::caller.size > 1000
+        # with size > 30 it crashed in parse_aips_download
+        # with size > 50 parse_aips_download was okay
+        # if nothing it crashed with a stack of > 8000
+        raise OdbaError
+      end
       retrieved_objects = []
       rows.each { |row|
         obj_id = row.at(0)

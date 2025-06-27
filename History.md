@@ -1,5 +1,6 @@
-## not yet released
+## 1.1.9 / not yet released
 
+* bulk_restore will abort if stack level is greater than 1000
 * Removed obsolete install.rb. Updated History.txt and moved it to History.md
 * Used standarb for all files
 * Removed obsolete (and not needed) WITH_OIDS to allow running with postgres 12 and later
